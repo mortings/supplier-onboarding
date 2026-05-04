@@ -1,0 +1,867 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Bluestone PIM — Drop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0d12;
+    --bg-2: #11141b;
+    --panel: #161a23;
+    --panel-2: #1c2030;
+    --line: #232838;
+    --line-2: #2c3245;
+    --text: #e7eaf2;
+    --muted: #8a92a6;
+    --accent: #6ee7b7;
+    --accent-2: #38bdf8;
+    --brand: #4f8cff;
+    --danger: #f87171;
+    --warn: #fbbf24;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(79,140,255,.15), transparent 60%),
+      radial-gradient(900px 500px at -10% 100%, rgba(110,231,183,.10), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+  /* Top nav */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 22px 36px; border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(11,13,18,.7);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .2px; }
+  .brand-logo {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: conic-gradient(from 220deg, #4f8cff, #6ee7b7, #38bdf8, #4f8cff);
+    box-shadow: 0 6px 24px rgba(79,140,255,.35);
+  }
+  .brand small { font-weight: 500; color: var(--muted); margin-left: 6px; }
+  nav .pill {
+    font-size: 12px; padding: 6px 10px; border: 1px solid var(--line-2);
+    border-radius: 999px; color: var(--muted);
+  }
+
+  /* Layout */
+  main {
+    max-width: 1180px; margin: 0 auto; padding: 48px 36px 120px;
+  }
+
+  /* Steps indicator */
+  .stepbar {
+    display: flex; gap: 8px; margin-bottom: 32px; align-items: center;
+    flex-wrap: wrap;
+  }
+  .step {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px; border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--muted); font-size: 13px; font-weight: 500;
+    transition: all .25s ease;
+  }
+  .step .dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--panel-2); color: var(--muted);
+    display: grid; place-items: center; font-size: 11px;
+    border: 1px solid var(--line-2);
+  }
+  .step.active { color: var(--text); border-color: var(--brand); background: rgba(79,140,255,.08); }
+  .step.active .dot { background: var(--brand); color: white; border-color: var(--brand); }
+  .step.done { color: var(--accent); border-color: rgba(110,231,183,.35); }
+  .step.done .dot { background: var(--accent); color: #022; border-color: var(--accent); }
+  .step-sep { height: 1px; width: 24px; background: var(--line); }
+
+  /* Hero */
+  .hero h1 {
+    font-size: 44px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 10px;
+    background: linear-gradient(180deg, #fff, #c8cfdd);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero p { color: var(--muted); font-size: 17px; max-width: 640px; margin: 0 0 32px; line-height: 1.55; }
+
+  /* Drop zone */
+  .dropzone {
+    position: relative;
+    border: 1.5px dashed var(--line-2); border-radius: 20px;
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    padding: 56px 32px; text-align: center;
+    transition: all .25s ease;
+    overflow: hidden;
+  }
+  .dropzone::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(600px 200px at 50% 0%, rgba(79,140,255,.12), transparent 70%);
+    pointer-events: none;
+  }
+  .dropzone.drag {
+    border-color: var(--brand);
+    background: linear-gradient(180deg, rgba(79,140,255,.08), var(--panel-2));
+    transform: scale(1.005);
+  }
+  .dz-icon {
+    width: 64px; height: 64px; margin: 0 auto 16px;
+    border-radius: 18px; display: grid; place-items: center;
+    background: linear-gradient(180deg, rgba(79,140,255,.15), rgba(110,231,183,.08));
+    border: 1px solid var(--line-2);
+    color: var(--brand);
+  }
+  .dz-icon svg { width: 32px; height: 32px; }
+  .dropzone h2 { margin: 0 0 8px; font-weight: 700; font-size: 22px; }
+  .dropzone .sub { color: var(--muted); margin-bottom: 22px; }
+  .row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 18px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--line-2); background: var(--panel-2);
+    color: var(--text); font-weight: 600; font-size: 14px;
+    transition: all .15s ease;
+  }
+  .btn:hover { border-color: #3a4259; background: #232838; }
+  .btn-primary {
+    background: linear-gradient(180deg, #5a98ff, #3f7ce6);
+    border-color: #3f7ce6; color: #fff;
+    box-shadow: 0 8px 24px -8px rgba(79,140,255,.6);
+  }
+  .btn-primary:hover { filter: brightness(1.06); }
+  .btn-ghost { background: transparent; }
+  .btn[disabled] { opacity: .5; cursor: not-allowed; }
+  .formats { margin-top: 22px; color: var(--muted); font-size: 12px; }
+  .formats span { display: inline-block; margin: 0 6px; padding: 3px 8px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 11px;}
+
+  /* Section card */
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 24px;
+  }
+  .card + .card { margin-top: 20px; }
+  .card h3 { margin: 0 0 4px; font-size: 16px; font-weight: 700; }
+  .card .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+
+  /* Hidden screens */
+  .screen { display: none; animation: fade .35s ease both; }
+  .screen.active { display: block; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: none;} }
+
+  /* Mapping */
+  .summary {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 16px; margin-bottom: 24px;
+  }
+  .stat {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px;
+  }
+  .stat .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+  .stat .v { font-size: 24px; font-weight: 700; margin-top: 4px; }
+  .stat .v small { color: var(--muted); font-size: 12px; font-weight: 500; margin-left: 6px; }
+
+  .mapping-table { width: 100%; }
+  .map-row {
+    display: grid; grid-template-columns: 1fr auto 1fr 1fr;
+    gap: 14px; align-items: center;
+    padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--panel-2); margin-bottom: 8px;
+    transition: border-color .15s;
+  }
+  .map-row:hover { border-color: var(--line-2); }
+  .col-name { font-weight: 600; }
+  .col-sample {
+    color: var(--muted); font-size: 12px; font-family: 'JetBrains Mono', monospace;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .arrow { color: var(--muted); }
+  select {
+    width: 100%; padding: 9px 12px; border-radius: 8px;
+    background: var(--bg-2); color: var(--text);
+    border: 1px solid var(--line-2); font: inherit; font-size: 13px;
+    appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a92a6' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 30px;
+  }
+  select:focus { outline: none; border-color: var(--brand); }
+  .badge {
+    font-size: 11px; padding: 3px 8px; border-radius: 999px;
+    background: rgba(110,231,183,.12); color: var(--accent);
+    border: 1px solid rgba(110,231,183,.25);
+    font-weight: 500;
+  }
+  .badge.warn { background: rgba(251,191,36,.1); color: var(--warn); border-color: rgba(251,191,36,.25); }
+  .badge.skip { background: var(--bg-2); color: var(--muted); border-color: var(--line); }
+
+  .header-row {
+    display: grid; grid-template-columns: 1fr auto 1fr 1fr;
+    gap: 14px; padding: 0 14px 8px;
+    color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+  }
+
+  /* Preview */
+  .preview-wrap {
+    overflow: auto; border: 1px solid var(--line); border-radius: 10px;
+    max-height: 420px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td {
+    padding: 12px 14px; text-align: left;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  th {
+    background: var(--panel-2); position: sticky; top: 0;
+    font-weight: 600; color: var(--muted); font-size: 11px;
+    text-transform: uppercase; letter-spacing: .06em;
+  }
+  tbody tr:hover { background: rgba(255,255,255,.02); }
+  td .pid { font-family: 'JetBrains Mono', monospace; color: var(--accent-2); }
+  td .price { font-variant-numeric: tabular-nums; }
+  td .img-cell {
+    width: 32px; height: 32px; border-radius: 6px; background: var(--panel-2);
+    border: 1px solid var(--line); display: inline-block; vertical-align: middle;
+    background-size: cover; background-position: center;
+  }
+
+  /* Import */
+  .import-wrap {
+    display: grid; grid-template-columns: 1fr 380px; gap: 24px;
+  }
+  @media (max-width: 900px) {
+    .import-wrap { grid-template-columns: 1fr; }
+    .summary { grid-template-columns: repeat(2, 1fr); }
+    .map-row, .header-row { grid-template-columns: 1fr 1fr; }
+    .map-row .col-sample, .header-row :nth-child(2), .header-row :nth-child(3) { display: none; }
+  }
+  .progress {
+    height: 8px; background: var(--bg-2); border-radius: 999px; overflow: hidden;
+    border: 1px solid var(--line);
+  }
+  .progress > div {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--brand), var(--accent));
+    transition: width .25s ease;
+  }
+  .log {
+    margin-top: 16px; height: 280px; overflow: auto;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px;
+  }
+  .log .line { padding: 2px 0; color: var(--muted); }
+  .log .line.ok { color: var(--accent); }
+  .log .line.info { color: var(--accent-2); }
+  .log .line.warn { color: var(--warn); }
+  .log .line.head { color: var(--text); font-weight: 600; padding-top: 8px; }
+
+  .side-stat {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px; margin-bottom: 12px;
+  }
+  .side-stat .k { color: var(--muted); font-size: 12px; }
+  .side-stat .v { font-size: 22px; font-weight: 700; margin-top: 2px; }
+  .pulse {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); margin-right: 6px; vertical-align: middle;
+    box-shadow: 0 0 0 0 rgba(110,231,183,.6); animation: pulse 1.4s infinite;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(110,231,183,.6); }
+    70% { box-shadow: 0 0 0 10px rgba(110,231,183,0); }
+    100% { box-shadow: 0 0 0 0 rgba(110,231,183,0); }
+  }
+
+  /* Done */
+  .done-wrap { text-align: center; padding: 56px 24px; }
+  .done-icon {
+    width: 88px; height: 88px; margin: 0 auto 20px;
+    border-radius: 50%; display: grid; place-items: center;
+    background: radial-gradient(circle, rgba(110,231,183,.25), transparent 70%);
+    color: var(--accent);
+  }
+  .done-icon svg { width: 56px; height: 56px; }
+  .done-wrap h2 { font-size: 32px; margin: 0 0 8px; font-weight: 800; }
+  .done-wrap p { color: var(--muted); margin: 0 0 24px; }
+
+  .footer-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+  .footer-actions.left { justify-content: space-between; }
+
+  /* Toolbar */
+  .filebar {
+    display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px;
+    margin-bottom: 20px;
+  }
+  .file-icon {
+    width: 38px; height: 38px; border-radius: 8px; display: grid; place-items: center;
+    background: rgba(56,189,248,.1); color: var(--accent-2); border: 1px solid rgba(56,189,248,.2);
+  }
+  .file-meta .name { font-weight: 600; }
+  .file-meta .desc { color: var(--muted); font-size: 12px; }
+  .filebar .grow { flex: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-logo"></div>
+    Bluestone PIM <small>· Drop</small>
+  </div>
+  <nav><span class="pill">Demo · Onboarding</span></nav>
+</header>
+
+<main>
+
+  <!-- STEP BAR -->
+  <div class="stepbar" id="stepbar">
+    <div class="step active" data-step="1"><div class="dot">1</div> Upload</div>
+    <div class="step-sep"></div>
+    <div class="step" data-step="2"><div class="dot">2</div> Map fields</div>
+    <div class="step-sep"></div>
+    <div class="step" data-step="3"><div class="dot">3</div> Preview</div>
+    <div class="step-sep"></div>
+    <div class="step" data-step="4"><div class="dot">4</div> Import</div>
+  </div>
+
+  <!-- SCREEN 1: UPLOAD -->
+  <section class="screen active" id="screen-1">
+    <div class="hero">
+      <h1>Onboard your product data in minutes.</h1>
+      <p>Drop a CSV or JSON export from your spreadsheet, ERP, or legacy PIM. We'll auto-detect your schema, map it to Bluestone attributes, and import everything in one go.</p>
+    </div>
+
+    <div class="dropzone" id="dropzone">
+      <div class="dz-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+      </div>
+      <h2>Drop your product file here</h2>
+      <div class="sub">or paste data, browse, or try with sample data</div>
+      <div class="row">
+        <button class="btn btn-primary" id="browseBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+          Browse files
+        </button>
+        <button class="btn" id="sampleBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Try with sample data
+        </button>
+        <button class="btn btn-ghost" id="pasteBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M9 4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-4"/></svg>
+          Paste data
+        </button>
+      </div>
+      <div class="formats">Supports <span>.csv</span><span>.tsv</span><span>.json</span><span>.xlsx*</span></div>
+      <input type="file" id="fileInput" accept=".csv,.tsv,.json,.txt" style="display:none" />
+    </div>
+
+    <div style="margin-top: 28px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+      <div class="card" style="padding:18px;">
+        <h3 style="font-size:14px;">⚡ Auto-detect schema</h3>
+        <div class="sub" style="margin:0;">Headers, types, and product structure recognized instantly.</div>
+      </div>
+      <div class="card" style="padding:18px;">
+        <h3 style="font-size:14px;">🧩 Smart attribute mapping</h3>
+        <div class="sub" style="margin:0;">We suggest the right Bluestone attribute for every column.</div>
+      </div>
+      <div class="card" style="padding:18px;">
+        <h3 style="font-size:14px;">✓ Validate before import</h3>
+        <div class="sub" style="margin:0;">Catch issues in preview — never break your live catalog.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 2: MAPPING -->
+  <section class="screen" id="screen-2">
+    <div class="filebar">
+      <div class="file-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </div>
+      <div class="file-meta">
+        <div class="name" id="fileName">products.csv</div>
+        <div class="desc" id="fileDesc">— rows · — columns</div>
+      </div>
+      <div class="grow"></div>
+      <button class="btn btn-ghost" id="changeFileBtn">Change file</button>
+    </div>
+
+    <div class="summary" id="summary"></div>
+
+    <div class="card">
+      <h3>Map source columns to Bluestone attributes</h3>
+      <div class="sub">We've auto-matched what we recognize. Review the suggestions below.</div>
+
+      <div class="header-row">
+        <div>Source column</div>
+        <div></div>
+        <div>Sample value</div>
+        <div>Bluestone attribute</div>
+      </div>
+      <div id="mapping"></div>
+    </div>
+
+    <div class="footer-actions left">
+      <button class="btn btn-ghost" id="back2">← Back</button>
+      <button class="btn btn-primary" id="next2">Continue to preview →</button>
+    </div>
+  </section>
+
+  <!-- SCREEN 3: PREVIEW -->
+  <section class="screen" id="screen-3">
+    <div class="card">
+      <h3>Preview — how your products will look in Bluestone</h3>
+      <div class="sub">Showing the first <span id="previewCount">10</span> of <span id="previewTotal">0</span> products. Validation passed.</div>
+      <div class="preview-wrap">
+        <table id="previewTable"></table>
+      </div>
+    </div>
+
+    <div class="footer-actions left">
+      <button class="btn btn-ghost" id="back3">← Back to mapping</button>
+      <div>
+        <button class="btn" id="dryRunBtn">Dry-run validate</button>
+        <button class="btn btn-primary" id="next3">Start import →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 4: IMPORT -->
+  <section class="screen" id="screen-4">
+    <div class="import-wrap">
+      <div class="card">
+        <h3><span class="pulse" id="pulse"></span><span id="importTitle">Importing products…</span></h3>
+        <div class="sub" id="importSub">Connecting to Bluestone PAPI…</div>
+        <div class="progress"><div id="bar"></div></div>
+        <div class="log" id="log"></div>
+      </div>
+      <div>
+        <div class="side-stat"><div class="k">Imported</div><div class="v" id="sIn">0</div></div>
+        <div class="side-stat"><div class="k">Throughput</div><div class="v" id="sTput">0 <small style="color:var(--muted);font-size:12px;font-weight:500;">products / sec</small></div></div>
+        <div class="side-stat"><div class="k">Errors</div><div class="v" id="sErr">0</div></div>
+        <div class="side-stat"><div class="k">Time elapsed</div><div class="v" id="sTime">0.0s</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 5: DONE -->
+  <section class="screen" id="screen-5">
+    <div class="card done-wrap">
+      <div class="done-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      </div>
+      <h2>You're live on Bluestone PIM 🎉</h2>
+      <p><span id="doneCount">0</span> products imported · <span id="doneCats">0</span> categories created · 0 errors</p>
+      <div class="row">
+        <button class="btn btn-primary" id="openCatalogBtn">Open catalog →</button>
+        <button class="btn" id="restartBtn">Onboard another file</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+/* =========================================================
+   Sample dataset (kitchen-appliances vibe — varied & realistic)
+   ========================================================= */
+const SAMPLE_CSV = `sku,product_name,brand,category,short_desc,price_eur,stock_qty,color,weight_kg,image_url,ean
+KA-1001,AltoSonic V12 Flowmeter,KROHNE,Flow Measurement,Ultrasonic flowmeter for liquids,4290.00,18,Stainless,12.4,https://picsum.photos/seed/v12/64,5901234123457
+KA-1002,OPTIFLUX 2300,KROHNE,Flow Measurement,Electromagnetic flowmeter for water,1890.00,42,Blue,7.1,https://picsum.photos/seed/2300/64,5901234123458
+KA-1003,Cable ladder OE125 3m,Oglaend,Cable Management,Hot-dip galvanized cable ladder,189.50,220,Galvanized,8.9,https://picsum.photos/seed/oe125/64,5901234123459
+KA-1004,Cable tray PG200 6m,Oglaend,Cable Management,Perforated steel tray with side rails,310.00,76,Steel,14.2,https://picsum.photos/seed/pg200/64,5901234123460
+KA-1005,OPTIMASS 6400,KROHNE,Flow Measurement,Coriolis mass flowmeter,8990.00,7,White,22.0,https://picsum.photos/seed/6400/64,5901234123461
+KA-1006,WATERFLUX 3070,KROHNE,Flow Measurement,Battery-powered water meter,1290.00,55,Black,5.4,https://picsum.photos/seed/3070/64,5901234123462
+KA-1007,STC10 Strut Channel,Oglaend,Cable Management,41x41mm strut channel 6m,42.00,640,Galvanized,5.2,https://picsum.photos/seed/stc10/64,5901234123463
+KA-1008,Hanger Bracket HB80,Oglaend,Cable Management,Adjustable ceiling bracket,18.90,1240,Steel,0.9,https://picsum.photos/seed/hb80/64,5901234123464
+KA-1009,OPTIWAVE 7500,KROHNE,Level Measurement,80GHz radar level transmitter,3490.00,29,White,4.8,https://picsum.photos/seed/7500/64,5901234123465
+KA-1010,OPTIBAR PM 5060,KROHNE,Pressure,Smart pressure transmitter HART,690.00,84,Stainless,0.6,https://picsum.photos/seed/5060/64,5901234123466
+KA-1011,Junction Box JB-200,Oglaend,Cable Management,IP66 stainless junction box,89.00,310,Stainless,1.2,https://picsum.photos/seed/jb200/64,5901234123467
+KA-1012,OPTISWITCH 5300,KROHNE,Level Measurement,Vibrating fork level switch,310.00,140,Stainless,0.8,https://picsum.photos/seed/5300/64,5901234123468
+KA-1013,Cable cleat CC-50,Oglaend,Cable Management,Single-cable trefoil cleat,12.40,2200,Aluminium,0.3,https://picsum.photos/seed/cc50/64,5901234123469
+KA-1014,OPTISONIC 3400,KROHNE,Flow Measurement,Inline ultrasonic flowmeter,3990.00,22,Stainless,9.7,https://picsum.photos/seed/3400/64,5901234123470
+KA-1015,OPTIMASS 1400,KROHNE,Flow Measurement,Compact Coriolis mass flowmeter,5290.00,14,White,11.2,https://picsum.photos/seed/1400/64,5901234123471`;
+
+/* =========================================================
+   Bluestone target attributes
+   ========================================================= */
+const BLUESTONE_ATTRS = [
+  { id: 'sku',          label: 'Product Number (SKU)', required: true,  match: ['sku','product_id','id','article','art_no','code'] },
+  { id: 'name',         label: 'Name',                 required: true,  match: ['name','product_name','title','product','description_short_title'] },
+  { id: 'brand',        label: 'Brand / Manufacturer', required: false, match: ['brand','manufacturer','vendor','make'] },
+  { id: 'category',     label: 'Category',             required: false, match: ['category','cat','group','product_group','family'] },
+  { id: 'description',  label: 'Short description',    required: false, match: ['short_desc','description','desc','summary','product_description'] },
+  { id: 'price',        label: 'Price (EUR)',          required: false, match: ['price','price_eur','cost','msrp','list_price','retail_price'] },
+  { id: 'stock',        label: 'Stock quantity',       required: false, match: ['stock','stock_qty','qty','inventory','quantity','on_hand'] },
+  { id: 'color',        label: 'Color',                required: false, match: ['color','colour','finish'] },
+  { id: 'weight',       label: 'Weight (kg)',          required: false, match: ['weight','weight_kg','mass','net_weight'] },
+  { id: 'image',        label: 'Image URL',            required: false, match: ['image','image_url','img','photo','picture','thumb'] },
+  { id: 'gtin',         label: 'GTIN / EAN',           required: false, match: ['ean','gtin','upc','barcode','isbn'] },
+  { id: '__skip',       label: '— Skip this column —', required: false, match: [] },
+];
+
+/* =========================================================
+   State
+   ========================================================= */
+let state = {
+  fileName: '',
+  rows: [],
+  columns: [],
+  mapping: {},   // colName -> attrId
+};
+
+/* =========================================================
+   Utils
+   ========================================================= */
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+
+function setStep(n) {
+  $$('.step').forEach(el => {
+    const s = +el.dataset.step;
+    el.classList.toggle('active', s === n);
+    el.classList.toggle('done', s < n);
+  });
+  $$('.screen').forEach(el => el.classList.remove('active'));
+  // step 5 = done screen
+  $('#screen-' + n).classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function parseCSV(text) {
+  // Simple, robust CSV parser supporting quoted fields and commas/tabs
+  const sep = text.indexOf('\t') !== -1 && text.indexOf(',') === -1 ? '\t' : ',';
+  const rows = [];
+  let cur = [], field = '', inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i], n = text[i+1];
+    if (inQ) {
+      if (c === '"' && n === '"') { field += '"'; i++; }
+      else if (c === '"') { inQ = false; }
+      else { field += c; }
+    } else {
+      if (c === '"') inQ = true;
+      else if (c === sep) { cur.push(field); field = ''; }
+      else if (c === '\n') { cur.push(field); rows.push(cur); cur = []; field = ''; }
+      else if (c === '\r') { /* skip */ }
+      else { field += c; }
+    }
+  }
+  if (field.length || cur.length) { cur.push(field); rows.push(cur); }
+  if (!rows.length) return { columns: [], rows: [] };
+  const columns = rows.shift().map(s => s.trim());
+  const out = rows.filter(r => r.length && r.some(v => v !== '')).map(r => {
+    const obj = {};
+    columns.forEach((c, i) => obj[c] = (r[i] ?? '').trim());
+    return obj;
+  });
+  return { columns, rows: out };
+}
+
+function parseJSON(text) {
+  const data = JSON.parse(text);
+  const arr = Array.isArray(data) ? data : (Array.isArray(data.products) ? data.products : [data]);
+  const cols = new Set();
+  arr.forEach(o => Object.keys(o).forEach(k => cols.add(k)));
+  const columns = [...cols];
+  const rows = arr.map(o => {
+    const r = {};
+    columns.forEach(c => r[c] = o[c] != null ? String(o[c]) : '');
+    return r;
+  });
+  return { columns, rows };
+}
+
+function autoMap(columns) {
+  const mapping = {};
+  const used = new Set();
+  for (const col of columns) {
+    const key = col.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    let best = null;
+    for (const attr of BLUESTONE_ATTRS) {
+      if (attr.id === '__skip') continue;
+      if (used.has(attr.id)) continue;
+      if (attr.match.some(m => key === m || key.includes(m) || m.includes(key))) {
+        best = attr.id; break;
+      }
+    }
+    mapping[col] = best || '__skip';
+    if (best) used.add(best);
+  }
+  return mapping;
+}
+
+function fmtNum(n) { return n.toLocaleString('en-US'); }
+
+/* =========================================================
+   File handling
+   ========================================================= */
+function ingestText(name, text) {
+  let res;
+  try {
+    if (name.toLowerCase().endsWith('.json') || text.trim().startsWith('[') || text.trim().startsWith('{')) {
+      res = parseJSON(text);
+    } else {
+      res = parseCSV(text);
+    }
+  } catch (e) {
+    alert('Could not parse file: ' + e.message);
+    return;
+  }
+  if (!res.columns.length || !res.rows.length) {
+    alert('File appears to be empty.'); return;
+  }
+  state.fileName = name;
+  state.columns = res.columns;
+  state.rows = res.rows;
+  state.mapping = autoMap(res.columns);
+  renderMapping();
+  setStep(2);
+}
+
+/* =========================================================
+   Mapping render
+   ========================================================= */
+function renderMapping() {
+  $('#fileName').textContent = state.fileName;
+  $('#fileDesc').textContent = `${fmtNum(state.rows.length)} rows · ${state.columns.length} columns · auto-detected schema`;
+
+  const mapped = Object.values(state.mapping).filter(v => v !== '__skip').length;
+  const required = BLUESTONE_ATTRS.filter(a => a.required).map(a => a.id);
+  const reqOk = required.every(r => Object.values(state.mapping).includes(r));
+  const cats = new Set(state.rows.map(r => Object.entries(state.mapping).find(([_, v]) => v === 'category')?.[0]).filter(Boolean));
+  const catCol = Object.entries(state.mapping).find(([_, v]) => v === 'category')?.[0];
+  const catCount = catCol ? new Set(state.rows.map(r => r[catCol]).filter(Boolean)).size : 0;
+
+  $('#summary').innerHTML = `
+    <div class="stat"><div class="k">Products detected</div><div class="v">${fmtNum(state.rows.length)}</div></div>
+    <div class="stat"><div class="k">Columns</div><div class="v">${state.columns.length} <small>${mapped} mapped</small></div></div>
+    <div class="stat"><div class="k">Categories</div><div class="v">${catCount || '—'}</div></div>
+    <div class="stat"><div class="k">Required fields</div><div class="v" style="color:${reqOk ? 'var(--accent)' : 'var(--warn)'}">${reqOk ? 'OK' : 'Missing'}</div></div>
+  `;
+
+  const wrap = $('#mapping');
+  wrap.innerHTML = '';
+  state.columns.forEach(col => {
+    const sample = state.rows.slice(0, 5).map(r => r[col]).find(v => v && v.length);
+    const current = state.mapping[col];
+    const row = document.createElement('div');
+    row.className = 'map-row';
+    const opts = BLUESTONE_ATTRS.map(a => `<option value="${a.id}" ${a.id === current ? 'selected' : ''}>${a.label}${a.required ? ' *' : ''}</option>`).join('');
+    let badge = '';
+    if (current === '__skip') badge = '<span class="badge skip">skip</span>';
+    else {
+      const attr = BLUESTONE_ATTRS.find(a => a.id === current);
+      const auto = attr && attr.match.some(m => col.toLowerCase().includes(m));
+      badge = auto ? '<span class="badge">✓ auto</span>' : '<span class="badge warn">manual</span>';
+    }
+    row.innerHTML = `
+      <div>
+        <div class="col-name">${col}</div>
+        ${badge}
+      </div>
+      <div class="arrow">→</div>
+      <div class="col-sample">${sample ? escapeHtml(String(sample).slice(0, 40)) : '<em style="color:var(--line-2)">empty</em>'}</div>
+      <div><select data-col="${col}">${opts}</select></div>
+    `;
+    wrap.appendChild(row);
+  });
+  wrap.querySelectorAll('select').forEach(s => s.addEventListener('change', e => {
+    state.mapping[e.target.dataset.col] = e.target.value;
+    renderMapping();
+  }));
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* =========================================================
+   Preview
+   ========================================================= */
+function renderPreview() {
+  const cols = ['image','sku','name','brand','category','price','stock','description'];
+  const labels = {image:'',sku:'SKU',name:'Name',brand:'Brand',category:'Category',price:'Price',stock:'Stock',description:'Description'};
+  const reverse = {};
+  Object.entries(state.mapping).forEach(([col, attr]) => { if (attr !== '__skip') reverse[attr] = col; });
+
+  $('#previewTotal').textContent = fmtNum(state.rows.length);
+  $('#previewCount').textContent = Math.min(10, state.rows.length);
+
+  const head = '<thead><tr>' + cols.map(c => `<th>${labels[c]}</th>`).join('') + '</tr></thead>';
+  const rows = state.rows.slice(0, 10).map(r => {
+    return '<tr>' + cols.map(c => {
+      const src = reverse[c];
+      const val = src ? r[src] : '';
+      if (c === 'image') {
+        const img = reverse.image ? r[reverse.image] : '';
+        return `<td><span class="img-cell" style="${img ? `background-image:url('${escapeHtml(img)}')` : ''}"></span></td>`;
+      }
+      if (c === 'sku') return `<td><span class="pid">${escapeHtml(val || '—')}</span></td>`;
+      if (c === 'price') {
+        const num = parseFloat(val);
+        return `<td><span class="price">${isFinite(num) ? '€ ' + num.toFixed(2) : '—'}</span></td>`;
+      }
+      if (c === 'description') {
+        return `<td style="color:var(--muted); max-width: 280px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml((val || '').slice(0, 60))}</td>`;
+      }
+      return `<td>${escapeHtml(val || '—')}</td>`;
+    }).join('') + '</tr>';
+  }).join('');
+  $('#previewTable').innerHTML = head + '<tbody>' + rows + '</tbody>';
+}
+
+/* =========================================================
+   Import simulation
+   ========================================================= */
+async function runImport() {
+  const total = state.rows.length;
+  let done = 0, errors = 0;
+  const start = performance.now();
+  const log = $('#log');
+  log.innerHTML = '';
+
+  function addLog(text, cls = '') {
+    const d = document.createElement('div');
+    d.className = 'line ' + cls;
+    d.textContent = text;
+    log.appendChild(d);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  addLog('› Connecting to Bluestone PAPI…', 'info');
+  await sleep(450);
+  addLog('✓ Authenticated · workspace: demo-eu-west', 'ok');
+  await sleep(250);
+  addLog('› Validating schema mapping…', 'info');
+  await sleep(400);
+  addLog(`✓ Mapping validated · ${Object.values(state.mapping).filter(v=>v!=='__skip').length} attributes`, 'ok');
+  addLog('› Resolving categories…', 'info');
+  await sleep(400);
+  const catCol = Object.entries(state.mapping).find(([_, v]) => v === 'category')?.[0];
+  const cats = catCol ? [...new Set(state.rows.map(r => r[catCol]).filter(Boolean))] : [];
+  cats.forEach(c => addLog(`  + category "${c}"`, ''));
+  await sleep(300);
+  addLog('Uploading products', 'head');
+
+  const skuCol = Object.entries(state.mapping).find(([_, v]) => v === 'sku')?.[0];
+  const nameCol = Object.entries(state.mapping).find(([_, v]) => v === 'name')?.[0];
+
+  // Simulate batched import
+  const batchSize = Math.max(1, Math.ceil(total / 30));
+  for (let i = 0; i < total; i += batchSize) {
+    const batch = state.rows.slice(i, i + batchSize);
+    await sleep(120 + Math.random() * 120);
+    batch.forEach(r => {
+      done++;
+      const sku = skuCol ? r[skuCol] : `auto-${done}`;
+      const name = nameCol ? r[nameCol] : '(unnamed)';
+      addLog(`  POST /products  ${sku}  ${name.slice(0, 36)}`, 'ok');
+    });
+    const pct = Math.min(100, Math.round((done / total) * 100));
+    $('#bar').style.width = pct + '%';
+    $('#sIn').textContent = fmtNum(done);
+    const elapsed = (performance.now() - start) / 1000;
+    $('#sTput').innerHTML = (done / Math.max(0.5, elapsed)).toFixed(1) + ' <small style="color:var(--muted);font-size:12px;font-weight:500;">products / sec</small>';
+    $('#sErr').textContent = errors;
+    $('#sTime').textContent = elapsed.toFixed(1) + 's';
+    $('#importSub').textContent = `Uploading batch ${Math.ceil((i + batchSize) / batchSize)} · ${done} / ${total}`;
+  }
+
+  addLog('Indexing & publishing', 'head');
+  addLog('› Building search index…', 'info'); await sleep(400);
+  addLog('✓ Search index built', 'ok');
+  addLog('› Publishing to default channel…', 'info'); await sleep(400);
+  addLog('✓ Published to: web · mobile · marketplace', 'ok');
+  addLog('› Done.', 'ok');
+
+  $('#pulse').style.background = 'var(--accent)';
+  $('#importTitle').textContent = 'Import complete';
+  $('#importSub').textContent = `Imported ${fmtNum(done)} products in ${((performance.now()-start)/1000).toFixed(1)}s`;
+
+  await sleep(800);
+  $('#doneCount').textContent = fmtNum(done);
+  $('#doneCats').textContent = cats.length;
+  setStep(5);
+  // also mark step 4 done
+  $$('.step').forEach(el => { if (+el.dataset.step <= 4) el.classList.add('done'); });
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/* =========================================================
+   Wiring
+   ========================================================= */
+const dz = $('#dropzone');
+['dragenter','dragover'].forEach(ev =>
+  dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev =>
+  dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag'); }));
+dz.addEventListener('drop', e => {
+  const f = e.dataTransfer.files?.[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => ingestText(f.name, r.result);
+  r.readAsText(f);
+});
+
+$('#browseBtn').onclick = () => $('#fileInput').click();
+$('#fileInput').onchange = e => {
+  const f = e.target.files?.[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => ingestText(f.name, r.result);
+  r.readAsText(f);
+};
+$('#sampleBtn').onclick = () => ingestText('sample-products.csv', SAMPLE_CSV);
+$('#pasteBtn').onclick = () => {
+  const text = prompt('Paste CSV or JSON data:');
+  if (text && text.trim()) ingestText('pasted-data.csv', text);
+};
+$('#changeFileBtn').onclick = () => setStep(1);
+$('#back2').onclick = () => setStep(1);
+$('#next2').onclick = () => {
+  const required = BLUESTONE_ATTRS.filter(a => a.required).map(a => a.id);
+  const ok = required.every(r => Object.values(state.mapping).includes(r));
+  if (!ok) {
+    alert('Please map the required fields (SKU and Name) before continuing.');
+    return;
+  }
+  renderPreview(); setStep(3);
+};
+$('#back3').onclick = () => setStep(2);
+$('#dryRunBtn').onclick = () => {
+  $('#dryRunBtn').textContent = 'Validating…';
+  setTimeout(() => {
+    $('#dryRunBtn').textContent = '✓ All rows valid';
+    $('#dryRunBtn').style.color = 'var(--accent)';
+  }, 800);
+};
+$('#next3').onclick = () => { setStep(4); runImport(); };
+$('#openCatalogBtn').onclick = () => alert('Demo: would open the Bluestone PIM catalog view.');
+$('#restartBtn').onclick = () => {
+  state = { fileName:'', rows:[], columns:[], mapping:{} };
+  $('#bar').style.width = '0%';
+  $('#dryRunBtn').textContent = 'Dry-run validate';
+  $('#dryRunBtn').style.color = '';
+  $$('.step').forEach(el => el.classList.remove('done'));
+  setStep(1);
+};
+</script>
+</body>
+</html>
