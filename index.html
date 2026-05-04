@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root {
+  :root, [data-theme="dark"] {
     --bg: #0b0d12;
     --bg-2: #11141b;
     --panel: #161a23;
@@ -23,7 +23,27 @@
     --danger: #f87171;
     --warn: #fbbf24;
     --radius: 14px;
+    --header-bg: rgba(11,13,18,.7);
   }
+  [data-theme="light"] {
+    --bg: #f7f8fb;
+    --bg-2: #ffffff;
+    --panel: #ffffff;
+    --panel-2: #f3f5f9;
+    --line: #e4e7ee;
+    --line-2: #d3d8e2;
+    --text: #1a1f２e;
+    --text: #1a1f2e;
+    --muted: #6b7488;
+    --accent: #10a37f;
+    --accent-2: #0284c7;
+    --brand: #2f6fe8;
+    --danger: #dc2626;
+    --warn: #d97706;
+    --radius: 14px;
+    --header-bg: rgba(247,248,251,.8);
+  }
+  body { transition: background-color .3s ease, color .3s ease; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; height: 100%; }
   body {
@@ -44,8 +64,20 @@
     padding: 22px 36px; border-bottom: 1px solid var(--line);
     backdrop-filter: blur(8px);
     position: sticky; top: 0; z-index: 10;
-    background: rgba(11,13,18,.7);
+    background: var(--header-bg);
   }
+  .theme-toggle {
+    width: 36px; height: 36px; border-radius: 10px;
+    border: 1px solid var(--line-2); background: var(--panel-2);
+    color: var(--text); cursor: pointer;
+    display: grid; place-items: center;
+    transition: all .2s ease;
+  }
+  .theme-toggle:hover { border-color: var(--brand); color: var(--brand); }
+  .theme-toggle svg { width: 18px; height: 18px; }
+  .theme-toggle .icon-sun { display: none; }
+  [data-theme="light"] .theme-toggle .icon-sun { display: block; }
+  [data-theme="light"] .theme-toggle .icon-moon { display: none; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .2px; }
   .brand-logo {
     width: 28px; height: 28px; border-radius: 8px;
@@ -322,7 +354,12 @@
     <div class="brand-logo"></div>
     Bluestone PIM <small>· Drop</small>
   </div>
-  <nav><span class="pill">Demo · Onboarding</span></nav>
+  <nav>
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme" title="Toggle dark/light mode">
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+    </button>
+  </nav>
 </header>
 
 <main>
@@ -853,6 +890,15 @@ $('#dryRunBtn').onclick = () => {
   }, 800);
 };
 $('#next3').onclick = () => { setStep(4); runImport(); };
+// Theme toggle
+const savedTheme = localStorage.getItem('bs-theme') || 'dark';
+document.documentElement.setAttribute('data-theme', savedTheme);
+$('#themeToggle').onclick = () => {
+  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('bs-theme', next);
+};
+
 $('#openCatalogBtn').onclick = () => alert('Demo: would open the Bluestone PIM catalog view.');
 $('#restartBtn').onclick = () => {
   state = { fileName:'', rows:[], columns:[], mapping:{} };
