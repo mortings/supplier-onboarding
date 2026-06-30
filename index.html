@@ -349,6 +349,24 @@
   .file-meta .name { font-weight: 600; }
   .file-meta .desc { color: var(--muted); font-size: 12px; }
   .filebar .grow { flex: 1; }
+  /* ── Real-import additions ── */
+  .log .line.err { color: var(--danger); }
+  .conn-btn { display:inline-flex; align-items:center; gap:8px; }
+  .conn-dot { width:8px; height:8px; border-radius:50%; background:var(--danger); box-shadow:0 0 6px var(--danger); flex:none; }
+  .conn-dot.on { background:var(--accent); box-shadow:0 0 6px var(--accent); }
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  .modal-bg.open { display:flex; }
+  .modal { background:var(--bg-2); border:1px solid var(--line); border-radius:16px; max-width:480px; width:100%; padding:24px; }
+  .modal h3 { margin:0 0 4px; }
+  .modal .field { margin-top:14px; }
+  .modal label { display:block; font-size:12px; color:var(--muted); margin-bottom:6px; }
+  .modal input { width:100%; padding:10px 12px; background:var(--bg); border:1px solid var(--line); border-radius:9px; color:var(--text); font-size:14px; font-family:inherit; box-sizing:border-box; }
+  .modal .actions { margin-top:18px; display:flex; gap:10px; justify-content:flex-end; }
+  .modal .status { margin-top:12px; font-size:13px; min-height:18px; }
+  .modal .status.ok { color:var(--accent); } .modal .status.err { color:var(--danger); }
+  .catpick { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-top:10px; }
+  .catpick .field { flex:1; min-width:180px; }
+  .catpick label { display:block; font-size:12px; color:var(--muted); margin-bottom:6px; }
 </style>
 </head>
 <body>
@@ -359,6 +377,7 @@
     Bluestone PIM <small>· Drop</small>
   </div>
   <nav>
+    <button class="btn conn-btn" id="connectBtn" title="Connect to Bluestone PIM"><span class="conn-dot" id="connDot"></span> <span id="connLabel">Connect</span></button>
     <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme" title="Toggle dark/light mode">
       <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
@@ -467,6 +486,15 @@
 
   <!-- SCREEN 3: PREVIEW -->
   <section class="screen" id="screen-3">
+    <div class="card" id="catCard">
+      <h3>Import target</h3>
+      <div class="sub">Choose the Bluestone category these products will be created in.</div>
+      <div class="catpick">
+        <div class="field"><label>Catalog</label><select id="catalogSel"><option value="">Connect first…</option></select></div>
+        <div class="field"><label>Category</label><select id="categorySel"><option value="">—</option></select></div>
+        <button class="btn" id="reloadCatsBtn">↻ Reload</button>
+      </div>
+    </div>
     <div class="card">
       <h3>Preview — how your products will look in Bluestone</h3>
       <div class="sub">Showing the first <span id="previewCount">10</span> of <span id="previewTotal">0</span> products. Validation passed.</div>
@@ -517,6 +545,22 @@
     </div>
   </section>
 
+  <!-- CONNECT MODAL -->
+  <div class="modal-bg" id="connectModal">
+    <div class="modal">
+      <h3>Connect to Bluestone PIM</h3>
+      <div class="sub" style="margin:0">Imports run through your pim-agent Worker. The shared secret is stored only in this browser (localStorage).</div>
+      <div class="field"><label>Worker URL</label><input id="cfgUrl" placeholder="https://pim-agent-proxy.…workers.dev"></div>
+      <div class="field"><label>Shared secret</label><input id="cfgSecret" type="password" placeholder="SHARED_SECRET"></div>
+      <div class="status" id="connStatus"></div>
+      <div class="actions">
+        <button class="btn btn-ghost" id="connCancel">Cancel</button>
+        <button class="btn" id="connTest">Test connection</button>
+        <button class="btn btn-primary" id="connSave">Save</button>
+      </div>
+    </div>
+  </div>
+
 </main>
 
 <script>
@@ -543,20 +587,26 @@ KA-1015,OPTIMASS 1400,KROHNE,Flow Measurement,Compact Coriolis mass flowmeter,52
 /* =========================================================
    Bluestone target attributes
    ========================================================= */
-const BLUESTONE_ATTRS = [
-  { id: 'sku',          label: 'Product Number (SKU)', required: true,  match: ['sku','product_id','id','article','art_no','code'] },
-  { id: 'name',         label: 'Name',                 required: true,  match: ['name','product_name','title','product','description_short_title'] },
-  { id: 'brand',        label: 'Brand / Manufacturer', required: false, match: ['brand','manufacturer','vendor','make'] },
-  { id: 'category',     label: 'Category',             required: false, match: ['category','cat','group','product_group','family'] },
-  { id: 'description',  label: 'Short description',    required: false, match: ['short_desc','description','desc','summary','product_description'] },
-  { id: 'price',        label: 'Price (EUR)',          required: false, match: ['price','price_eur','cost','msrp','list_price','retail_price'] },
-  { id: 'stock',        label: 'Stock quantity',       required: false, match: ['stock','stock_qty','qty','inventory','quantity','on_hand'] },
-  { id: 'color',        label: 'Color',                required: false, match: ['color','colour','finish'] },
-  { id: 'weight',       label: 'Weight (kg)',          required: false, match: ['weight','weight_kg','mass','net_weight'] },
-  { id: 'image',        label: 'Image URL',            required: false, match: ['image','image_url','img','photo','picture','thumb'] },
-  { id: 'gtin',         label: 'GTIN / EAN',           required: false, match: ['ean','gtin','upc','barcode','isbn'] },
-  { id: '__skip',       label: '— Skip this column —', required: false, match: [] },
+// The two specials feed Bluestone's create_product (which only takes Name +
+// Number + Category). Everything else is mapped to a REAL attribute definition
+// pulled live from the tenant (state.defs) and written via set_product_attribute.
+const SPECIAL_ATTRS = [
+  { id: '__name',   label: 'Name',                 required: true,  match: ['name','product_name','title','product','description_short_title'] },
+  { id: '__number', label: 'Product Number (SKU)', required: true,  match: ['sku','product_id','id','article','art_no','code','number','product_number'] },
 ];
+function norm(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'_'); }
+// Build the full target list: specials + live definitions + skip.
+function targetAttrs(){
+  const defs = (state.defs || []).map(d => ({
+    id: 'def:' + d.id,
+    label: d.name + (d.dataType ? ' · ' + d.dataType : ''),
+    required: false,
+    defId: d.id,
+    attrName: d.name,
+    match: [d.name, d.number].filter(Boolean).map(norm)
+  }));
+  return [...SPECIAL_ATTRS, ...defs, { id: '__skip', label: '— Skip this column —', required: false, match: [] }];
+}
 
 /* =========================================================
    State
@@ -565,14 +615,115 @@ let state = {
   fileName: '',
   rows: [],
   columns: [],
-  mapping: {},   // colName -> attrId
+  mapping: {},          // colName -> attrId  (__name | __number | def:<id> | __skip)
+  defs: [],             // live attribute definitions [{id,name,dataType,number}]
+  catalogs: [],         // [{id,name}]
+  categories: [],       // [{id,name,depth}] for the chosen catalog
+  targetCatalogId: '',
+  targetCategoryId: '',
+  targetCategoryName: '',
 };
+
+const SETTINGS = {
+  workerUrl: (localStorage.getItem('so-workerUrl') || 'https://pim-agent-proxy.mortings.workers.dev').replace(/\/+$/,''),
+  secret: localStorage.getItem('so-secret') || '',
+};
+let pendingAfterConnect = null; // 'map' — what to resume once connected
 
 /* =========================================================
    Utils
    ========================================================= */
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
+
+/* =========================================================
+   Bluestone connection (via the pim-agent Worker)
+   ========================================================= */
+function isConnected(){ return !!(SETTINGS.workerUrl && SETTINGS.secret); }
+async function mcpCall(tool, args){
+  const r = await fetch(SETTINGS.workerUrl + '/api/mcp-call', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'X-Demo-Secret': SETTINGS.secret },
+    body: JSON.stringify({ tool, args: args || {} })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (!r.ok || j.success === false) throw new Error(j.error || ('HTTP ' + r.status));
+  return j.result;
+}
+// MCP text tools return "<summary>\n\n<JSON>"; pull out the JSON body.
+function extractMcpText(result){
+  if (!result) return '';
+  if (typeof result === 'string') return result;
+  if (Array.isArray(result.content)) return result.content.filter(c=>c&&c.type==='text'&&typeof c.text==='string').map(c=>c.text).join('\n');
+  try { return JSON.stringify(result); } catch(e){ return ''; }
+}
+function parseMcpJson(result){
+  const t = extractMcpText(result);
+  const i = t.indexOf('{'), a = t.indexOf('[');
+  let s = (i < 0 && a < 0) ? -1 : (a < 0 ? i : (i < 0 ? a : Math.min(i, a)));
+  if (s < 0) return null;
+  try { return JSON.parse(t.slice(s)); } catch(e){ return null; }
+}
+async function loadDefs(){
+  const parsed = parseMcpJson(await mcpCall('list_attribute_definitions', {}));
+  const list = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.definitions)) ? parsed.definitions : [];
+  state.defs = list.map(d => ({
+    id: d.id,
+    name: d.name || d.number || '(unnamed)',
+    number: d.number || '',
+    dataType: d.dataType || d.type || '',
+    // Select/enum types store their allowed options under enum.values; capture
+    // them so we can resolve a CSV label to the option id the API expects.
+    enumValues: (d.enum && Array.isArray(d.enum.values))
+      ? d.enum.values.map(v => ({ id: v.valueId || v.id, value: v.value, number: v.number })).filter(v => v.id)
+      : null
+  })).filter(d => d.id);
+  return state.defs;
+}
+function refreshConnUI(){
+  const on = isConnected();
+  $('#connDot').classList.toggle('on', on);
+  $('#connLabel').textContent = on ? 'Connected' : 'Connect';
+}
+function openConnect(){
+  $('#cfgUrl').value = SETTINGS.workerUrl;
+  $('#cfgSecret').value = SETTINGS.secret;
+  $('#connStatus').textContent = ''; $('#connStatus').className = 'status';
+  $('#connectModal').classList.add('open');
+}
+function closeConnect(){ $('#connectModal').classList.remove('open'); }
+async function testConnect(){
+  const url = $('#cfgUrl').value.trim().replace(/\/+$/,'');
+  const st = $('#connStatus');
+  st.className = 'status'; st.textContent = 'Checking…';
+  try {
+    const r = await fetch(url + '/api/health');
+    const j = await r.json().catch(()=>({}));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const ok = j.mcpConfigured && j.bluestoneConfigured;
+    st.className = 'status ' + (ok ? 'ok' : 'err');
+    st.textContent = ok ? '✓ Worker reachable · MCP + Bluestone credentials configured' : 'Worker reachable but missing MCP/Bluestone config';
+  } catch(e){
+    st.className = 'status err';
+    st.textContent = /failed to fetch|cors/i.test(String(e.message)) ? 'Network/CORS error — check the Worker URL' : 'Unreachable: ' + e.message;
+  }
+}
+async function saveConnect(){
+  SETTINGS.workerUrl = $('#cfgUrl').value.trim().replace(/\/+$/,'');
+  SETTINGS.secret = $('#cfgSecret').value.trim();
+  localStorage.setItem('so-workerUrl', SETTINGS.workerUrl);
+  localStorage.setItem('so-secret', SETTINGS.secret);
+  refreshConnUI();
+  const st = $('#connStatus');
+  if (!isConnected()){ st.className='status err'; st.textContent='Enter both a Worker URL and a shared secret.'; return; }
+  // Validate the secret by loading the data model.
+  st.className='status'; st.textContent='Loading attribute definitions…';
+  try { await loadDefs(); }
+  catch(e){ st.className='status err'; st.textContent='Saved, but could not load attributes: '+e.message; return; }
+  st.className='status ok'; st.textContent='✓ Connected · '+state.defs.length+' attribute definitions loaded';
+  closeConnect();
+  if (pendingAfterConnect === 'map'){ pendingAfterConnect = null; proceedToMapping(); }
+}
 
 function setStep(n) {
   $$('.step').forEach(el => {
@@ -633,15 +784,22 @@ function parseJSON(text) {
 function autoMap(columns) {
   const mapping = {};
   const used = new Set();
+  const targets = targetAttrs();
+  const matches = (key, m) => {
+    if (!m) return false;
+    if (key === m) return true;
+    // Only allow substring matches when the shorter string is long enough to be
+    // meaningful — otherwise "ean" matches inside "cleaning", etc.
+    const shorter = Math.min(key.length, m.length);
+    return shorter >= 4 && (key.includes(m) || m.includes(key));
+  };
   for (const col of columns) {
-    const key = col.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const key = norm(col);
     let best = null;
-    for (const attr of BLUESTONE_ATTRS) {
+    for (const attr of targets) {
       if (attr.id === '__skip') continue;
       if (used.has(attr.id)) continue;
-      if (attr.match.some(m => key === m || key.includes(m) || m.includes(key))) {
-        best = attr.id; break;
-      }
+      if ((attr.match || []).some(m => matches(key, m))) { best = attr.id; break; }
     }
     mapping[col] = best || '__skip';
     if (best) used.add(best);
@@ -672,7 +830,18 @@ function ingestText(name, text) {
   state.fileName = name;
   state.columns = res.columns;
   state.rows = res.rows;
-  state.mapping = autoMap(res.columns);
+  proceedToMapping();
+}
+
+// Mapping needs the tenant's live attribute definitions, so ensure we're
+// connected and the data model is loaded before building the mapping UI.
+async function proceedToMapping(){
+  if (!isConnected()){ pendingAfterConnect = 'map'; openConnect(); return; }
+  if (!state.defs.length){
+    try { await loadDefs(); }
+    catch(e){ pendingAfterConnect = 'map'; openConnect(); $('#connStatus').className='status err'; $('#connStatus').textContent='Could not load attributes: '+e.message; return; }
+  }
+  state.mapping = autoMap(state.columns);
   renderMapping();
   setStep(2);
 }
@@ -684,17 +853,15 @@ function renderMapping() {
   $('#fileName').textContent = state.fileName;
   $('#fileDesc').textContent = `${fmtNum(state.rows.length)} rows · ${state.columns.length} columns · auto-detected schema`;
 
+  const targets = targetAttrs();
   const mapped = Object.values(state.mapping).filter(v => v !== '__skip').length;
-  const required = BLUESTONE_ATTRS.filter(a => a.required).map(a => a.id);
+  const required = SPECIAL_ATTRS.filter(a => a.required).map(a => a.id);
   const reqOk = required.every(r => Object.values(state.mapping).includes(r));
-  const cats = new Set(state.rows.map(r => Object.entries(state.mapping).find(([_, v]) => v === 'category')?.[0]).filter(Boolean));
-  const catCol = Object.entries(state.mapping).find(([_, v]) => v === 'category')?.[0];
-  const catCount = catCol ? new Set(state.rows.map(r => r[catCol]).filter(Boolean)).size : 0;
 
   $('#summary').innerHTML = `
     <div class="stat"><div class="k">Products detected</div><div class="v">${fmtNum(state.rows.length)}</div></div>
     <div class="stat"><div class="k">Columns</div><div class="v">${state.columns.length} <small>${mapped} mapped</small></div></div>
-    <div class="stat"><div class="k">Categories</div><div class="v">${catCount || '—'}</div></div>
+    <div class="stat"><div class="k">Attributes available</div><div class="v">${state.defs.length}</div></div>
     <div class="stat"><div class="k">Required fields</div><div class="v" style="color:${reqOk ? 'var(--accent)' : 'var(--warn)'}">${reqOk ? 'OK' : 'Missing'}</div></div>
   `;
 
@@ -705,12 +872,12 @@ function renderMapping() {
     const current = state.mapping[col];
     const row = document.createElement('div');
     row.className = 'map-row';
-    const opts = BLUESTONE_ATTRS.map(a => `<option value="${a.id}" ${a.id === current ? 'selected' : ''}>${a.label}${a.required ? ' *' : ''}</option>`).join('');
+    const opts = targets.map(a => `<option value="${a.id}" ${a.id === current ? 'selected' : ''}>${escapeHtml(a.label)}${a.required ? ' *' : ''}</option>`).join('');
     let badge = '';
     if (current === '__skip') badge = '<span class="badge skip">skip</span>';
     else {
-      const attr = BLUESTONE_ATTRS.find(a => a.id === current);
-      const auto = attr && attr.match.some(m => col.toLowerCase().includes(m));
+      const attr = targets.find(a => a.id === current);
+      const auto = attr && (attr.match || []).some(m => m && norm(col).includes(m));
       badge = auto ? '<span class="badge">✓ auto</span>' : '<span class="badge warn">manual</span>';
     }
     row.innerHTML = `
@@ -738,46 +905,82 @@ function escapeHtml(s) {
    Preview
    ========================================================= */
 function renderPreview() {
-  const cols = ['image','sku','name','brand','category','price','stock','description'];
-  const labels = {image:'',sku:'SKU',name:'Name',brand:'Brand',category:'Category',price:'Price',stock:'Stock',description:'Description'};
-  const reverse = {};
-  Object.entries(state.mapping).forEach(([col, attr]) => { if (attr !== '__skip') reverse[attr] = col; });
+  // Build columns from the actual mapping: SKU + Name first, then one column
+  // per mapped attribute definition — exactly what will be written.
+  const byCol = Object.entries(state.mapping).filter(([_, v]) => v !== '__skip');
+  const numberCol = byCol.find(([_, v]) => v === '__number')?.[0];
+  const nameCol = byCol.find(([_, v]) => v === '__name')?.[0];
+  const defCols = byCol.filter(([_, v]) => v.startsWith('def:'))
+    .map(([col, v]) => ({ col, label: (state.defs.find(d => 'def:' + d.id === v) || {}).name || v }));
+
+  const cols = [];
+  cols.push({ label: 'SKU', col: numberCol, kind: 'sku' });
+  cols.push({ label: 'Name', col: nameCol, kind: 'name' });
+  defCols.forEach(c => cols.push({ label: c.label, col: c.col, kind: 'attr' }));
 
   $('#previewTotal').textContent = fmtNum(state.rows.length);
   $('#previewCount').textContent = Math.min(10, state.rows.length);
 
-  const head = '<thead><tr>' + cols.map(c => `<th>${labels[c]}</th>`).join('') + '</tr></thead>';
+  const head = '<thead><tr>' + cols.map(c => `<th>${escapeHtml(c.label)}</th>`).join('') + '</tr></thead>';
   const rows = state.rows.slice(0, 10).map(r => {
     return '<tr>' + cols.map(c => {
-      const src = reverse[c];
-      const val = src ? r[src] : '';
-      if (c === 'image') {
-        const img = reverse.image ? r[reverse.image] : '';
-        return `<td><span class="img-cell" style="${img ? `background-image:url('${escapeHtml(img)}')` : ''}"></span></td>`;
-      }
-      if (c === 'sku') return `<td><span class="pid">${escapeHtml(val || '—')}</span></td>`;
-      if (c === 'price') {
-        const num = parseFloat(val);
-        return `<td><span class="price">${isFinite(num) ? '€ ' + num.toFixed(2) : '—'}</span></td>`;
-      }
-      if (c === 'description') {
-        return `<td style="color:var(--muted); max-width: 280px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml((val || '').slice(0, 60))}</td>`;
-      }
-      return `<td>${escapeHtml(val || '—')}</td>`;
+      const val = c.col ? r[c.col] : '';
+      if (c.kind === 'sku') return `<td><span class="pid">${escapeHtml(val || '—')}</span></td>`;
+      return `<td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml((val || '—').slice(0, 60))}</td>`;
     }).join('') + '</tr>';
   }).join('');
   $('#previewTable').innerHTML = head + '<tbody>' + rows + '</tbody>';
 }
 
 /* =========================================================
-   Import simulation
+   Category loading (target picker on the preview screen)
+   ========================================================= */
+async function loadCatalogs(){
+  const sel = $('#catalogSel');
+  sel.innerHTML = '<option value="">Loading…</option>';
+  try {
+    const parsed = parseMcpJson(await mcpCall('list_catalogs', {}));
+    const list = Array.isArray(parsed) ? parsed : (parsed && (parsed.catalogs || parsed.items)) || (parsed && parsed.data && parsed.data.catalogs) || [];
+    state.catalogs = list.map(c => ({ id: c.id || c.catalogId || c._id || c.nodeId || '', name: c.name || c.label || c.title || '(unnamed)' })).filter(c => c.id);
+    if (!state.catalogs.length){ sel.innerHTML = '<option value="">No catalogs found</option>'; return; }
+    sel.innerHTML = '<option value="">Select a catalog…</option>' + state.catalogs.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+    if (state.targetCatalogId) sel.value = state.targetCatalogId;
+  } catch(e){
+    sel.innerHTML = '<option value="">Error loading catalogs</option>';
+    alert('Could not load catalogs: ' + e.message);
+  }
+}
+async function loadCategories(catalogId){
+  const sel = $('#categorySel');
+  if (!catalogId){ sel.innerHTML = '<option value="">—</option>'; state.categories = []; return; }
+  sel.innerHTML = '<option value="">Loading…</option>';
+  const cat = state.catalogs.find(c => c.id === catalogId);
+  try {
+    const parsed = parseMcpJson(await mcpCall('list_category_tree', { catalogId, catalogName: cat ? cat.name : undefined, limit: 400 }));
+    const list = (parsed && (parsed.categories || parsed.items)) || (Array.isArray(parsed) ? parsed : []) || [];
+    state.categories = list.map(c => ({ id: c.id, name: c.name || '(unnamed)', depth: c.depth || 1 })).filter(c => c.id);
+    // Offer the catalog root itself plus every category, indented by depth.
+    const rootOpt = cat ? `<option value="${cat.id}">${escapeHtml(cat.name)} (catalog root)</option>` : '';
+    const opts = state.categories.filter(c => c.id !== catalogId).map(c => `<option value="${c.id}">${'  '.repeat(Math.max(0,(c.depth||1)-1))}${escapeHtml(c.name)}</option>`).join('');
+    sel.innerHTML = '<option value="">Select a category…</option>' + rootOpt + opts;
+  } catch(e){
+    sel.innerHTML = '<option value="">Error loading categories</option>';
+    alert('Could not load categories: ' + e.message);
+  }
+}
+
+/* =========================================================
+   Real import → Bluestone PIM (create_product + set_product_attribute)
    ========================================================= */
 async function runImport() {
   const total = state.rows.length;
-  let done = 0, errors = 0;
+  let done = 0, errors = 0, attrWrites = 0;
   const start = performance.now();
   const log = $('#log');
   log.innerHTML = '';
+  $('#bar').style.width = '0%';
+  $('#pulse').style.background = '';
+  $('#importTitle').textContent = 'Importing products…';
 
   function addLog(text, cls = '') {
     const d = document.createElement('div');
@@ -786,62 +989,90 @@ async function runImport() {
     log.appendChild(d);
     log.scrollTop = log.scrollHeight;
   }
-
-  addLog('› Connecting to Bluestone PAPI…', 'info');
-  await sleep(450);
-  addLog('✓ Authenticated · workspace: demo-eu-west', 'ok');
-  await sleep(250);
-  addLog('› Validating schema mapping…', 'info');
-  await sleep(400);
-  addLog(`✓ Mapping validated · ${Object.values(state.mapping).filter(v=>v!=='__skip').length} attributes`, 'ok');
-  addLog('› Resolving categories…', 'info');
-  await sleep(400);
-  const catCol = Object.entries(state.mapping).find(([_, v]) => v === 'category')?.[0];
-  const cats = catCol ? [...new Set(state.rows.map(r => r[catCol]).filter(Boolean))] : [];
-  cats.forEach(c => addLog(`  + category "${c}"`, ''));
-  await sleep(300);
-  addLog('Uploading products', 'head');
-
-  const skuCol = Object.entries(state.mapping).find(([_, v]) => v === 'sku')?.[0];
-  const nameCol = Object.entries(state.mapping).find(([_, v]) => v === 'name')?.[0];
-
-  // Simulate batched import
-  const batchSize = Math.max(1, Math.ceil(total / 30));
-  for (let i = 0; i < total; i += batchSize) {
-    const batch = state.rows.slice(i, i + batchSize);
-    await sleep(120 + Math.random() * 120);
-    batch.forEach(r => {
-      done++;
-      const sku = skuCol ? r[skuCol] : `auto-${done}`;
-      const name = nameCol ? r[nameCol] : '(unnamed)';
-      addLog(`  POST /products  ${sku}  ${name.slice(0, 36)}`, 'ok');
-    });
-    const pct = Math.min(100, Math.round((done / total) * 100));
-    $('#bar').style.width = pct + '%';
+  function tick(){
     $('#sIn').textContent = fmtNum(done);
+    $('#sErr').textContent = errors;
     const elapsed = (performance.now() - start) / 1000;
     $('#sTput').innerHTML = (done / Math.max(0.5, elapsed)).toFixed(1) + ' <small style="color:var(--muted);font-size:12px;font-weight:500;">products / sec</small>';
-    $('#sErr').textContent = errors;
     $('#sTime').textContent = elapsed.toFixed(1) + 's';
-    $('#importSub').textContent = `Uploading batch ${Math.ceil((i + batchSize) / batchSize)} · ${done} / ${total}`;
+    $('#bar').style.width = Math.min(100, Math.round((done / total) * 100)) + '%';
+    $('#importSub').textContent = `Importing · ${done} / ${total}`;
   }
 
-  addLog('Indexing & publishing', 'head');
-  addLog('› Building search index…', 'info'); await sleep(400);
-  addLog('✓ Search index built', 'ok');
-  addLog('› Publishing to default channel…', 'info'); await sleep(400);
-  addLog('✓ Published to: web · mobile · marketplace', 'ok');
-  addLog('› Done.', 'ok');
+  // Resolve mapping → concrete write plan.
+  const numberCol = Object.entries(state.mapping).find(([_, v]) => v === '__number')?.[0];
+  const nameCol = Object.entries(state.mapping).find(([_, v]) => v === '__name')?.[0];
+  const attrCols = Object.entries(state.mapping)
+    .filter(([_, v]) => v.startsWith('def:'))
+    .map(([col, v]) => { const def = state.defs.find(d => 'def:' + d.id === v); return def ? { col, defId: def.id, name: def.name, dataType: def.dataType, enumValues: def.enumValues } : null; })
+    .filter(Boolean);
+  // Resolve a CSV cell to the value(s) the API expects. Select/enum attributes
+  // need the option id, not the label — match by option value or number.
+  const resolveValues = (a, raw) => {
+    if (!a.enumValues) return { values: [raw] };
+    const isMulti = /multi/i.test(a.dataType || '');
+    const parts = isMulti ? raw.split(/[;,|]/).map(s => s.trim()).filter(Boolean) : [raw];
+    const ids = [];
+    for (const part of parts) {
+      const hit = a.enumValues.find(o => [o.value, o.number].some(x => String(x).toLowerCase() === part.toLowerCase()));
+      if (!hit) return { error: `"${part}" is not a valid option for ${a.name}` };
+      ids.push(hit.id);
+    }
+    return { values: ids };
+  };
 
+  addLog('› Connecting to Bluestone via pim-agent Worker…', 'info');
+  addLog('✓ Target category: ' + (state.targetCategoryName || state.targetCategoryId), 'ok');
+  addLog(`✓ Plan: create_product + ${attrCols.length} attribute write(s) per row`, 'ok');
+  addLog('Importing products', 'head');
+
+  for (const r of state.rows) {
+    const name = (nameCol ? r[nameCol] : '').trim() || '(unnamed)';
+    const number = (numberCol ? r[numberCol] : '').trim();
+    try {
+      const res = await mcpCall('create_product', {
+        name, number: number || undefined, type: 'SINGLE', categoryId: state.targetCategoryId || undefined
+      });
+      // create_product replies with a sentence ("… ID: <id>. Number: …"), not
+      // JSON — try JSON first, then fall back to parsing the ID out of the text.
+      const parsed = parseMcpJson(res);
+      let pid = parsed && (parsed.id || parsed.productId || parsed._id);
+      if (!pid) { const m = extractMcpText(res).match(/\bID:\s*([A-Za-z0-9]{16,})/); if (m) pid = m[1]; }
+      if (!pid) {
+        const txt = extractMcpText(res);
+        if (/conflict|409|already exist/i.test(txt)) throw new Error('already exists (duplicate number) — skipped');
+        throw new Error('no product id in response: ' + txt.slice(0, 80));
+      }
+      done++;
+      addLog(`✓ ${number || '—'}  ${name.slice(0, 40)}`, 'ok');
+
+      // Write each mapped attribute (set_product_attribute ADDs — fine for a
+      // freshly created product that has no values yet).
+      for (const a of attrCols) {
+        const val = (r[a.col] || '').trim();
+        if (!val) continue;
+        const resolved = resolveValues(a, val);
+        if (resolved.error){ errors++; addLog(`  ⚠ ${resolved.error} — skipped`.slice(0, 120), 'err'); continue; }
+        try { await mcpCall('set_product_attribute', { productId: pid, definitionId: a.defId, values: resolved.values, attributeName: a.name }); attrWrites++; }
+        catch(e){ errors++; addLog(`  ⚠ ${a.name}: ${e.message}`.slice(0, 120), 'err'); }
+      }
+    } catch(e){
+      errors++;
+      addLog(`✗ ${number || name.slice(0,30)}: ${e.message}`.slice(0, 140), 'err');
+    }
+    tick();
+  }
+
+  addLog('› Done.', 'ok');
   $('#pulse').style.background = 'var(--accent)';
   $('#importTitle').textContent = 'Import complete';
-  $('#importSub').textContent = `Imported ${fmtNum(done)} products in ${((performance.now()-start)/1000).toFixed(1)}s`;
+  $('#importSub').textContent = `Imported ${fmtNum(done)} of ${fmtNum(total)} products · ${fmtNum(attrWrites)} attribute writes · ${errors} error(s) in ${((performance.now()-start)/1000).toFixed(1)}s`;
 
-  await sleep(800);
+  await sleep(600);
   $('#doneCount').textContent = fmtNum(done);
-  $('#doneCats').textContent = cats.length;
+  $('#doneCats').textContent = '1';
+  $('#screen-5 p').innerHTML = `<span id="doneCount">${fmtNum(done)}</span> products imported into <strong>${escapeHtml(state.targetCategoryName || 'the selected category')}</strong> · ${fmtNum(attrWrites)} attribute values · ${errors} error(s)`;
   setStep(5);
-  // also mark step 4 done
   $$('.step').forEach(el => { if (+el.dataset.step <= 4) el.classList.add('done'); });
 }
 
@@ -877,13 +1108,15 @@ $('#pasteBtn').onclick = () => {
 $('#changeFileBtn').onclick = () => setStep(1);
 $('#back2').onclick = () => setStep(1);
 $('#next2').onclick = () => {
-  const required = BLUESTONE_ATTRS.filter(a => a.required).map(a => a.id);
+  const required = SPECIAL_ATTRS.filter(a => a.required).map(a => a.id);
   const ok = required.every(r => Object.values(state.mapping).includes(r));
   if (!ok) {
-    alert('Please map the required fields (SKU and Name) before continuing.');
+    alert('Please map the required fields (Name and Product Number/SKU) before continuing.');
     return;
   }
   renderPreview(); setStep(3);
+  // Populate the category picker now that we're on the preview screen.
+  if (isConnected() && !state.catalogs.length) loadCatalogs();
 };
 $('#back3').onclick = () => setStep(2);
 $('#dryRunBtn').onclick = () => {
@@ -893,7 +1126,23 @@ $('#dryRunBtn').onclick = () => {
     $('#dryRunBtn').style.color = 'var(--accent)';
   }, 800);
 };
-$('#next3').onclick = () => { setStep(4); runImport(); };
+$('#catalogSel').onchange = e => { state.targetCatalogId = e.target.value; state.targetCategoryId = ''; state.targetCategoryName = ''; loadCategories(e.target.value); };
+$('#categorySel').onchange = e => {
+  state.targetCategoryId = e.target.value;
+  state.targetCategoryName = e.target.value ? e.target.options[e.target.selectedIndex].text.trim() : '';
+};
+$('#reloadCatsBtn').onclick = () => { if (isConnected()) loadCatalogs(); else openConnect(); };
+$('#next3').onclick = () => {
+  if (!isConnected()){ openConnect(); return; }
+  if (!state.targetCategoryId){ alert('Choose a target catalog and category first.'); return; }
+  setStep(4); runImport();
+};
+// Connect modal
+$('#connectBtn').onclick = openConnect;
+$('#connCancel').onclick = closeConnect;
+$('#connTest').onclick = testConnect;
+$('#connSave').onclick = saveConnect;
+$('#connectModal').addEventListener('click', e => { if (e.target.id === 'connectModal') closeConnect(); });
 // Theme toggle
 const savedTheme = localStorage.getItem('bs-theme') || 'dark';
 document.documentElement.setAttribute('data-theme', savedTheme);
@@ -905,13 +1154,18 @@ $('#themeToggle').onclick = () => {
 
 $('#openCatalogBtn').onclick = () => alert('Demo: would open the Bluestone PIM catalog view.');
 $('#restartBtn').onclick = () => {
-  state = { fileName:'', rows:[], columns:[], mapping:{} };
+  // Keep the live data model & connection; just clear the file-specific bits.
+  state = { ...state, fileName:'', rows:[], columns:[], mapping:{}, targetCatalogId:'', targetCategoryId:'', targetCategoryName:'' };
   $('#bar').style.width = '0%';
   $('#dryRunBtn').textContent = 'Dry-run validate';
   $('#dryRunBtn').style.color = '';
   $$('.step').forEach(el => el.classList.remove('done'));
   setStep(1);
 };
+
+/* ── Init ── */
+refreshConnUI();
+if (isConnected()) { loadDefs().catch(() => { /* surfaced when the user reaches mapping */ }); }
 </script>
 </body>
 </html>
