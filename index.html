@@ -785,21 +785,23 @@ function autoMap(columns) {
   const mapping = {};
   const used = new Set();
   const targets = targetAttrs();
-  const matches = (key, m) => {
-    if (!m) return false;
-    if (key === m) return true;
-    // Only allow substring matches when the shorter string is long enough to be
-    // meaningful — otherwise "ean" matches inside "cleaning", etc.
+  // Score a candidate: exact match (2) beats a substring match (1). The shorter
+  // side must be ≥4 chars for substrings, so "ean" won't match inside "cleaning"
+  // and "Material" won't get hijacked by "Material Finish".
+  const scoreMatch = (key, m) => {
+    if (!m) return 0;
+    if (key === m) return 2;
     const shorter = Math.min(key.length, m.length);
-    return shorter >= 4 && (key.includes(m) || m.includes(key));
+    return (shorter >= 4 && (key.includes(m) || m.includes(key))) ? 1 : 0;
   };
   for (const col of columns) {
     const key = norm(col);
-    let best = null;
+    let best = null, bestScore = 0;
     for (const attr of targets) {
-      if (attr.id === '__skip') continue;
-      if (used.has(attr.id)) continue;
-      if ((attr.match || []).some(m => matches(key, m))) { best = attr.id; break; }
+      if (attr.id === '__skip' || used.has(attr.id)) continue;
+      let s = 0;
+      for (const m of (attr.match || [])) { const v = scoreMatch(key, m); if (v > s) s = v; }
+      if (s > bestScore) { bestScore = s; best = attr.id; if (s === 2) break; }
     }
     mapping[col] = best || '__skip';
     if (best) used.add(best);
