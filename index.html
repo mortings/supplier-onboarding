@@ -367,7 +367,14 @@
   .catpick { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-top:10px; }
   .catpick .field { flex:1; min-width:180px; }
   .catpick label { display:block; font-size:12px; color:var(--muted); margin-bottom:6px; }
+  .spinner { width:16px; height:16px; border-radius:50%; border:2px solid var(--line); border-top-color:var(--accent); animation:spin .7s linear infinite; display:inline-block; flex:none; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .pdf-busy { display:flex; align-items:center; gap:12px; font-size:15px; color:var(--text); }
+  .pdf-log { margin-top:14px; max-height:160px; overflow:auto; font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:3px; }
+  .pdf-log .err { color:var(--danger); }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
 </head>
 <body>
 
@@ -402,7 +409,7 @@
   <section class="screen active" id="screen-1">
     <div class="hero">
       <h1>Onboard your product data in minutes.</h1>
-      <p>Drop a CSV or JSON export from your spreadsheet, ERP, or legacy PIM. We'll auto-detect your schema, map it to Bluestone attributes, and import everything in one go.</p>
+      <p>Drop a CSV or JSON export from your spreadsheet, ERP, or legacy PIM — or a product PDF datasheet and let Claude read it. We'll auto-detect your schema, map it to Bluestone attributes, and import everything in one go.</p>
     </div>
 
     <div class="dropzone" id="dropzone">
@@ -429,8 +436,8 @@
           Paste data
         </button>
       </div>
-      <div class="formats">Supports <span>.csv</span><span>.tsv</span><span>.json</span><span>.xlsx*</span></div>
-      <input type="file" id="fileInput" accept=".csv,.tsv,.json,.txt" style="display:none" />
+      <div class="formats">Supports <span>.csv</span><span>.tsv</span><span>.json</span><span>.pdf ✨ AI</span><span>.xlsx*</span></div>
+      <input type="file" id="fileInput" accept=".csv,.tsv,.json,.txt,.pdf" multiple style="display:none" />
     </div>
 
     <div style="margin-top: 28px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
@@ -545,6 +552,16 @@
     </div>
   </section>
 
+  <!-- PDF EXTRACTION OVERLAY -->
+  <div class="modal-bg" id="pdfModal">
+    <div class="modal">
+      <h3>Reading your PDF<span id="pdfPlural">s</span> with Claude</h3>
+      <div class="sub" style="margin:0">Extracting product data and mapping it to your Bluestone attributes.</div>
+      <div class="pdf-busy" style="margin-top:16px"><span class="spinner"></span><span id="pdfBusyText">Starting…</span></div>
+      <div class="pdf-log" id="pdfLog"></div>
+    </div>
+  </div>
+
   <!-- CONNECT MODAL -->
   <div class="modal-bg" id="connectModal">
     <div class="modal">
@@ -552,6 +569,7 @@
       <div class="sub" style="margin:0">Imports run through your pim-agent Worker. The shared secret is stored only in this browser (localStorage).</div>
       <div class="field"><label>Worker URL</label><input id="cfgUrl" placeholder="https://pim-agent-proxy.…workers.dev"></div>
       <div class="field"><label>Shared secret</label><input id="cfgSecret" type="password" placeholder="SHARED_SECRET"></div>
+      <div class="field"><label>Anthropic API key <span style="color:var(--muted)">— optional, only for PDF import</span></label><input id="cfgAnthropic" type="password" placeholder="sk-ant-…"></div>
       <div class="status" id="connStatus"></div>
       <div class="actions">
         <button class="btn btn-ghost" id="connCancel">Cancel</button>
@@ -627,8 +645,11 @@ let state = {
 const SETTINGS = {
   workerUrl: (localStorage.getItem('so-workerUrl') || 'https://pim-agent-proxy.mortings.workers.dev').replace(/\/+$/,''),
   secret: localStorage.getItem('so-secret') || '',
+  anthropicKey: localStorage.getItem('so-anthropic-key') || '',
 };
-let pendingAfterConnect = null; // 'map' — what to resume once connected
+const AI_MODEL = 'claude-opus-4-8'; // PDF → structured product extraction
+let pendingAfterConnect = null;     // 'map' | 'pdf' — what to resume once connected
+let pendingPdfFiles = null;
 
 /* =========================================================
    Utils
@@ -688,6 +709,7 @@ function refreshConnUI(){
 function openConnect(){
   $('#cfgUrl').value = SETTINGS.workerUrl;
   $('#cfgSecret').value = SETTINGS.secret;
+  $('#cfgAnthropic').value = SETTINGS.anthropicKey;
   $('#connStatus').textContent = ''; $('#connStatus').className = 'status';
   $('#connectModal').classList.add('open');
 }
@@ -711,8 +733,10 @@ async function testConnect(){
 async function saveConnect(){
   SETTINGS.workerUrl = $('#cfgUrl').value.trim().replace(/\/+$/,'');
   SETTINGS.secret = $('#cfgSecret').value.trim();
+  SETTINGS.anthropicKey = $('#cfgAnthropic').value.trim();
   localStorage.setItem('so-workerUrl', SETTINGS.workerUrl);
   localStorage.setItem('so-secret', SETTINGS.secret);
+  localStorage.setItem('so-anthropic-key', SETTINGS.anthropicKey);
   refreshConnUI();
   const st = $('#connStatus');
   if (!isConnected()){ st.className='status err'; st.textContent='Enter both a Worker URL and a shared secret.'; return; }
@@ -722,7 +746,9 @@ async function saveConnect(){
   catch(e){ st.className='status err'; st.textContent='Saved, but could not load attributes: '+e.message; return; }
   st.className='status ok'; st.textContent='✓ Connected · '+state.defs.length+' attribute definitions loaded';
   closeConnect();
-  if (pendingAfterConnect === 'map'){ pendingAfterConnect = null; proceedToMapping(); }
+  const resume = pendingAfterConnect; pendingAfterConnect = null;
+  if (resume === 'map') proceedToMapping();
+  else if (resume === 'pdf' && pendingPdfFiles){ const f = pendingPdfFiles; pendingPdfFiles = null; handlePdfFiles(f); }
 }
 
 function setStep(n) {
@@ -846,6 +872,114 @@ async function proceedToMapping(){
   state.mapping = autoMap(state.columns);
   renderMapping();
   setStep(2);
+}
+
+/* =========================================================
+   PDF import — extract text (pdf.js) → structure with Claude
+   ========================================================= */
+async function extractPdfText(file){
+  if (!window.pdfjsLib) throw new Error('PDF library not loaded');
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  let out = '';
+  const pages = Math.min(pdf.numPages, 3); // "simple 1–3 page product PDFs"
+  for (let i = 1; i <= pages; i++){
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    out += content.items.map(it => it.str).join(' ') + '\n\n';
+  }
+  return out.replace(/[ \t]+/g, ' ').trim();
+}
+
+// Ask Claude to map the datasheet text onto the tenant's real attributes.
+async function aiExtractProduct(text){
+  const fieldLines = state.defs.map(d => {
+    if (d.enumValues && d.enumValues.length) return `- ${d.name} (one of: ${d.enumValues.slice(0,40).map(o=>o.value).join(' | ')})`;
+    return `- ${d.name}`;
+  }).join('\n');
+  const prompt =
+`You are extracting structured product data from a supplier's product datasheet (a 1–3 page PDF).
+
+PDF TEXT:
+"""
+${text.slice(0, 12000)}
+"""
+
+Return the product as JSON:
+- name: the product's display name / title.
+- sku: the product, article, model or part number if present, else null.
+- attributes: an array of {field, value}. Each "field" MUST be EXACTLY one of the available attribute names listed below — copy the name verbatim. Only include an attribute when you can determine its value from the text. For attributes that list allowed options, "value" MUST be exactly one of those options; if none apply, omit that attribute. Strip units from numeric values (e.g. "12.4 kg" → "12.4").
+
+AVAILABLE ATTRIBUTES:
+${fieldLines}`;
+  const schema = {
+    type: 'object', additionalProperties: false,
+    required: ['name','sku','attributes'],
+    properties: {
+      name: { type: 'string' },
+      sku: { type: ['string','null'] },
+      attributes: {
+        type: 'array',
+        items: { type: 'object', additionalProperties: false, required: ['field','value'],
+          properties: { field: { type: 'string' }, value: { type: 'string' } } }
+      }
+    }
+  };
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': SETTINGS.anthropicKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({ model: AI_MODEL, max_tokens: 4096, messages: [{ role: 'user', content: prompt }], output_config: { format: { type: 'json_schema', schema } } })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error((j.error && j.error.message) || ('Anthropic HTTP ' + r.status));
+  const block = (j.content || []).find(b => b.type === 'text');
+  if (!block) throw new Error('No content in Claude response');
+  return JSON.parse(block.text);
+}
+
+// PDF busy overlay
+function pdfBusy(open, text){ $('#pdfModal').classList.toggle('open', open); if (text) $('#pdfBusyText').textContent = text; if (open) $('#pdfLog').innerHTML = ''; }
+function pdfLog(text, cls){ const d = document.createElement('div'); if (cls) d.className = cls; d.textContent = text; $('#pdfLog').appendChild(d); $('#pdfLog').scrollTop = $('#pdfLog').scrollHeight; }
+
+async function handlePdfFiles(files){
+  files = [...files].filter(f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf');
+  if (!files.length) return;
+  // Need both a Bluestone connection (for the data model) and an Anthropic key.
+  if (!isConnected() || !SETTINGS.anthropicKey){
+    pendingAfterConnect = 'pdf'; pendingPdfFiles = files; openConnect();
+    if (isConnected() && !SETTINGS.anthropicKey){ $('#connStatus').className='status err'; $('#connStatus').textContent='Add an Anthropic API key to import PDFs.'; }
+    return;
+  }
+  if (!state.defs.length){ try { await loadDefs(); } catch(e){ alert('Could not load attributes: ' + e.message); return; } }
+
+  $('#pdfPlural').style.display = files.length > 1 ? '' : 'none';
+  pdfBusy(true, `Reading ${files.length} PDF${files.length>1?'s':''}…`);
+  const rows = []; const cols = new Set(['Product Name','SKU']); let errs = 0;
+  for (let i = 0; i < files.length; i++){
+    const f = files[i];
+    $('#pdfBusyText').textContent = `Reading ${i+1} of ${files.length}: ${f.name}`;
+    try {
+      const text = await extractPdfText(f);
+      if (!text || text.length < 10) throw new Error('no extractable text (scanned image PDF?)');
+      const data = await aiExtractProduct(text);
+      const row = { 'Product Name': (data.name || f.name.replace(/\.pdf$/i,'')).trim(), 'SKU': (data.sku || '').trim() };
+      let n = 0;
+      for (const a of (data.attributes || [])){ if (a && a.field){ row[a.field] = String(a.value == null ? '' : a.value); cols.add(a.field); n++; } }
+      rows.push(row);
+      pdfLog(`✓ ${f.name} → ${row['Product Name']} · ${n} attribute${n!==1?'s':''}`);
+    } catch(e){ errs++; pdfLog(`✗ ${f.name}: ${e.message}`, 'err'); }
+  }
+  pdfBusy(false);
+  if (!rows.length){ alert('Could not extract any products from the PDF' + (files.length>1?'s':'') + '.'); return; }
+  state.fileName = files.length === 1 ? files[0].name : files.length + ' PDF files';
+  state.columns = [...cols];
+  state.rows = rows;
+  proceedToMapping();
 }
 
 /* =========================================================
@@ -1088,20 +1222,21 @@ const dz = $('#dropzone');
   dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag'); }));
 ['dragleave','drop'].forEach(ev =>
   dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag'); }));
-dz.addEventListener('drop', e => {
-  const f = e.dataTransfer.files?.[0]; if (!f) return;
+// Route dropped/selected files: PDFs go through Claude extraction; everything
+// else is parsed as text (CSV/JSON).
+function routeFiles(fileList){
+  const files = [...(fileList || [])]; if (!files.length) return;
+  const pdfs = files.filter(f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf');
+  if (pdfs.length){ handlePdfFiles(pdfs); return; }
+  const f = files[0];
   const r = new FileReader();
   r.onload = () => ingestText(f.name, r.result);
   r.readAsText(f);
-});
+}
+dz.addEventListener('drop', e => routeFiles(e.dataTransfer.files));
 
 $('#browseBtn').onclick = () => $('#fileInput').click();
-$('#fileInput').onchange = e => {
-  const f = e.target.files?.[0]; if (!f) return;
-  const r = new FileReader();
-  r.onload = () => ingestText(f.name, r.result);
-  r.readAsText(f);
-};
+$('#fileInput').onchange = e => routeFiles(e.target.files);
 $('#sampleBtn').onclick = () => ingestText('sample-products.csv', SAMPLE_CSV);
 $('#pasteBtn').onclick = () => {
   const text = prompt('Paste CSV or JSON data:');
