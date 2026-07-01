@@ -560,10 +560,20 @@
     </div>
     <div class="card">
       <h3>Preview — how your products will look in Bluestone</h3>
-      <div class="sub">Showing the first <span id="previewCount">10</span> of <span id="previewTotal">0</span> products. Validation passed.</div>
+      <div class="sub">Showing the first <span id="previewCount">10</span> of <span id="previewTotal">0</span> products.</div>
       <div class="preview-wrap">
         <table id="previewTable"></table>
       </div>
+    </div>
+
+    <div class="fail-panel" id="validationPanel" style="display:none">
+      <div class="fail-head">
+        <div><strong id="validationCount">0</strong> issue(s) found in your file</div>
+        <div class="fail-actions">
+          <button class="btn-tiny" id="validationDownloadBtn">⬇ Download CSV</button>
+        </div>
+      </div>
+      <div class="fail-list" id="validationList"></div>
     </div>
 
     <div class="footer-actions left">
@@ -1144,6 +1154,13 @@ function escapeHtml(s) {
    Preview
    ========================================================= */
 function renderPreview() {
+  // A prior Dry-run validate result is stale the moment the mapping changes —
+  // clear it so a leftover "✓ All rows valid" can't sit next to a new mapping.
+  lastValidation = null;
+  $('#dryRunBtn').textContent = 'Dry-run validate';
+  $('#dryRunBtn').style.color = '';
+  renderValidationPanel(null);
+
   // Build columns from the actual mapping: SKU + Name first, then one column
   // per mapped attribute definition — exactly what will be written.
   const byCol = Object.entries(state.mapping).filter(([_, v]) => v !== '__skip');
@@ -1209,6 +1226,112 @@ async function loadCategories(catalogId){
 }
 
 /* =========================================================
+   Mapping → write plan (shared by runImport and validateRows)
+   ========================================================= */
+function buildImportPlan(){
+  const numberCol = Object.entries(state.mapping).find(([_, v]) => v === '__number')?.[0];
+  const nameCol = Object.entries(state.mapping).find(([_, v]) => v === '__name')?.[0];
+  const attrCols = Object.entries(state.mapping)
+    .filter(([_, v]) => v.startsWith('def:'))
+    .map(([col, v]) => { const def = state.defs.find(d => 'def:' + d.id === v); return def ? { col, defId: def.id, name: def.name, dataType: def.dataType, enumValues: def.enumValues } : null; })
+    .filter(Boolean);
+  return { numberCol, nameCol, attrCols };
+}
+// Resolve a CSV cell to the value(s) the API expects. Select/enum attributes
+// need the option id, not the label — match by option value or number.
+function resolveAttrValue(a, raw){
+  if (!a.enumValues) return { values: [raw] };
+  const isMulti = /multi/i.test(a.dataType || '');
+  const parts = isMulti ? raw.split(/[;,|]/).map(s => s.trim()).filter(Boolean) : [raw];
+  const ids = [];
+  for (const part of parts) {
+    const hit = a.enumValues.find(o => [o.value, o.number].some(x => String(x).toLowerCase() === part.toLowerCase()));
+    if (!hit) return { error: `"${part}" is not a valid option for ${a.name}` };
+    ids.push(hit.id);
+  }
+  return { values: ids };
+}
+
+/* =========================================================
+   Dry-run validation (screen 3, before any writes happen)
+   ========================================================= */
+// Runs every row through the exact same plan/resolve logic runImport uses —
+// no API calls, no writes — so a clean result here is a real guarantee, not
+// a guess. Catches: missing required fields, duplicate SKUs within the file,
+// and attribute values that don't match a mapped dictionary's options. It
+// can't catch things that only the live tenant knows, like a SKU that
+// already exists in Bluestone — that still surfaces after Start import, in
+// the same error-review panel used for retries.
+function validateRows(){
+  const { numberCol, nameCol, attrCols } = buildImportPlan();
+  const issues = [];               // [{ rowIndex, row, number, name, message }]
+  const seenNumbers = new Map();   // number -> first rowIndex seen
+
+  state.rows.forEach((r, i) => {
+    const name = (nameCol ? r[nameCol] : '').trim();
+    const number = (numberCol ? r[numberCol] : '').trim();
+    const push = (message) => issues.push({ rowIndex: i, row: r, number, name, message });
+
+    if (!name) push('Missing name');
+    if (!number) push('Missing SKU / product number');
+    if (number) {
+      if (seenNumbers.has(number)) push(`Duplicate SKU — also used on row ${seenNumbers.get(number) + 1}`);
+      else seenNumbers.set(number, i);
+    }
+    for (const a of attrCols) {
+      const val = (r[a.col] || '').trim();
+      if (!val) continue;
+      const resolved = resolveAttrValue(a, val);
+      if (resolved.error) push(resolved.error);
+    }
+  });
+
+  return { total: state.rows.length, issues };
+}
+
+function renderValidationPanel(issues){
+  const panel = $('#validationPanel');
+  const list = $('#validationList');
+  if (!issues || !issues.length){ panel.style.display = 'none'; list.innerHTML = ''; return; }
+  panel.style.display = 'block';
+  $('#validationCount').textContent = issues.length;
+  const byRow = new Map();
+  for (const iss of issues){
+    if (!byRow.has(iss.rowIndex)) byRow.set(iss.rowIndex, { number: iss.number, name: iss.name, items: [] });
+    byRow.get(iss.rowIndex).items.push(iss.message);
+  }
+  list.innerHTML = [...byRow.values()].map(g => `
+    <div class="fail-row">
+      <div class="fail-row-head">
+        <span class="fail-num">${escapeHtml(g.number || '—')}</span>
+        <span class="fail-name">${escapeHtml(g.name || '(unnamed)')}</span>
+        <span class="fail-count">${g.items.length} issue${g.items.length === 1 ? '' : 's'}</span>
+      </div>
+      <ul class="fail-msgs">${g.items.map(m => `<li>${escapeHtml(m)}</li>`).join('')}</ul>
+    </div>
+  `).join('');
+}
+
+function downloadValidationCSV(issues){
+  if (!issues || !issues.length) return;
+  const cols = state.columns.length ? state.columns : Object.keys(issues[0].row || {});
+  const header = [...cols, '_error'];
+  const esc = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [header.map(esc).join(',')];
+  for (const iss of issues){
+    const row = cols.map(c => esc(iss.row ? iss.row[c] : ''));
+    row.push(esc(iss.message));
+    lines.push(row.join(','));
+  }
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'validation-issues.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* =========================================================
    Real import → Bluestone PIM (create_product + set_product_attribute)
    ========================================================= */
 // runImport(jobsOverride) — with no args, runs a fresh import over all
@@ -1248,27 +1371,10 @@ async function runImport(jobsOverride) {
     $('#importSub').textContent = `${isRetry ? 'Retrying' : 'Importing'} · ${done} / ${total}`;
   }
 
-  // Resolve mapping → concrete write plan.
-  const numberCol = Object.entries(state.mapping).find(([_, v]) => v === '__number')?.[0];
-  const nameCol = Object.entries(state.mapping).find(([_, v]) => v === '__name')?.[0];
-  const attrCols = Object.entries(state.mapping)
-    .filter(([_, v]) => v.startsWith('def:'))
-    .map(([col, v]) => { const def = state.defs.find(d => 'def:' + d.id === v); return def ? { col, defId: def.id, name: def.name, dataType: def.dataType, enumValues: def.enumValues } : null; })
-    .filter(Boolean);
-  // Resolve a CSV cell to the value(s) the API expects. Select/enum attributes
-  // need the option id, not the label — match by option value or number.
-  const resolveValues = (a, raw) => {
-    if (!a.enumValues) return { values: [raw] };
-    const isMulti = /multi/i.test(a.dataType || '');
-    const parts = isMulti ? raw.split(/[;,|]/).map(s => s.trim()).filter(Boolean) : [raw];
-    const ids = [];
-    for (const part of parts) {
-      const hit = a.enumValues.find(o => [o.value, o.number].some(x => String(x).toLowerCase() === part.toLowerCase()));
-      if (!hit) return { error: `"${part}" is not a valid option for ${a.name}` };
-      ids.push(hit.id);
-    }
-    return { values: ids };
-  };
+  // Resolve mapping → concrete write plan (shared with validateRows below, so
+  // "looks valid" and "will actually import" can never drift apart).
+  const { numberCol, nameCol, attrCols } = buildImportPlan();
+  const resolveValues = resolveAttrValue;
 
   if (!isRetry) {
     addLog('› Connecting to Bluestone via pim-agent Worker…', 'info');
@@ -1482,13 +1588,30 @@ $('#next2').onclick = () => {
   if (isConnected() && !state.catalogs.length) loadCatalogs();
 };
 $('#back3').onclick = () => setStep(2);
+let lastValidation = null;   // issues from the most recent Dry-run validate, for the download button
 $('#dryRunBtn').onclick = () => {
-  $('#dryRunBtn').textContent = 'Validating…';
+  if (!state.rows.length) return;
+  const btn = $('#dryRunBtn');
+  btn.disabled = true;
+  btn.textContent = 'Validating…';
+  btn.style.color = '';
+  // The check itself is synchronous and instant (pure client-side, no API
+  // calls) — a tiny delay just keeps "Validating…" perceptible.
   setTimeout(() => {
-    $('#dryRunBtn').textContent = '✓ All rows valid';
-    $('#dryRunBtn').style.color = 'var(--accent)';
-  }, 800);
+    const { total, issues } = validateRows();
+    lastValidation = issues;
+    btn.disabled = false;
+    if (!issues.length) {
+      btn.textContent = `✓ All ${fmtNum(total)} rows valid`;
+      btn.style.color = 'var(--accent)';
+    } else {
+      btn.textContent = `⚠ ${fmtNum(issues.length)} issue(s) found`;
+      btn.style.color = 'var(--danger)';
+    }
+    renderValidationPanel(issues);
+  }, 250);
 };
+$('#validationDownloadBtn').onclick = () => downloadValidationCSV(lastValidation);
 $('#catalogSel').onchange = e => { state.targetCatalogId = e.target.value; state.targetCategoryId = ''; state.targetCategoryName = ''; loadCategories(e.target.value); };
 $('#categorySel').onchange = e => {
   state.targetCategoryId = e.target.value;
@@ -1522,6 +1645,8 @@ $('#restartBtn').onclick = () => {
   $('#bar').style.width = '0%';
   $('#dryRunBtn').textContent = 'Dry-run validate';
   $('#dryRunBtn').style.color = '';
+  lastValidation = null;
+  renderValidationPanel(null);
   $$('.step').forEach(el => el.classList.remove('done'));
   renderFailuresPanel();
   setStep(1);
