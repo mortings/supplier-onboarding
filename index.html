@@ -71,8 +71,9 @@
     position: sticky; top: 0; z-index: 10;
     background: var(--header-bg);
   }
+  nav { display: flex; align-items: center; gap: 12px; }
   .theme-toggle {
-    width: 36px; height: 36px; border-radius: 10px;
+    width: 40px; height: 40px; border-radius: 10px;
     border: 1px solid var(--line-2); background: var(--panel-2);
     color: var(--text); cursor: pointer;
     display: grid; place-items: center;
@@ -129,7 +130,7 @@
     -webkit-background-clip: text; background-clip: text; color: transparent;
   }
   [data-theme="light"] .hero h1 {
-    background: linear-gradient(180deg, #0f172a, #334155);
+    background: linear-gradient(180deg, #0c2e4e, #2a5680);
     -webkit-background-clip: text; background-clip: text; color: transparent;
   }
   .hero p { color: var(--muted); font-size: 17px; max-width: 640px; margin: 0 0 32px; line-height: 1.55; }
@@ -191,6 +192,20 @@
   .card + .card { margin-top: 20px; }
   .card h3 { margin: 0 0 4px; font-size: 16px; font-weight: 700; }
   .card .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+
+  /* Feature cards (upload screen) — equal size, aligned */
+  .features { margin-top: 28px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: stretch; }
+  .feature {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px; display: flex; flex-direction: column; gap: 10px; margin: 0;
+  }
+  .feature .feat-icon {
+    width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center;
+    font-size: 17px; flex: none;
+    background: rgba(61,116,244,.10); border: 1px solid rgba(61,116,244,.22);
+  }
+  .feature h3 { margin: 0; font-size: 14px; font-weight: 700; }
+  .feature .sub { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 
   /* Hidden screens */
   .screen { display: none; animation: fade .35s ease both; }
@@ -451,18 +466,21 @@
       <input type="file" id="fileInput" accept=".csv,.tsv,.json,.txt,.pdf" multiple style="display:none" />
     </div>
 
-    <div style="margin-top: 28px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
-      <div class="card" style="padding:18px;">
-        <h3 style="font-size:14px;">⚡ Auto-detect schema</h3>
-        <div class="sub" style="margin:0;">Headers, types, and product structure recognized instantly.</div>
+    <div class="features">
+      <div class="feature">
+        <div class="feat-icon">⚡</div>
+        <h3>Auto-detect schema</h3>
+        <div class="sub">Headers, types, and product structure recognized instantly.</div>
       </div>
-      <div class="card" style="padding:18px;">
-        <h3 style="font-size:14px;">🧩 Smart attribute mapping</h3>
-        <div class="sub" style="margin:0;">We suggest the right Bluestone attribute for every column.</div>
+      <div class="feature">
+        <div class="feat-icon">🧩</div>
+        <h3>Smart attribute mapping</h3>
+        <div class="sub">We suggest the right Bluestone attribute for every column.</div>
       </div>
-      <div class="card" style="padding:18px;">
-        <h3 style="font-size:14px;">✓ Validate before import</h3>
-        <div class="sub" style="margin:0;">Catch issues in preview — never break your live catalog.</div>
+      <div class="feature">
+        <div class="feat-icon">✓</div>
+        <h3>Validate before import</h3>
+        <div class="sub">Catch issues in preview — never break your live catalog.</div>
       </div>
     </div>
   </section>
