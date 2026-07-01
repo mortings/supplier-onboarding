@@ -676,7 +676,8 @@ const SETTINGS = {
   secret: localStorage.getItem('so-secret') || '',
   anthropicKey: localStorage.getItem('so-anthropic-key') || '',
 };
-const AI_MODEL = 'claude-opus-4-8'; // PDF → structured product extraction
+const AI_MODEL = 'claude-opus-4-8';   // PDF → structured product extraction
+const IMPORT_CONCURRENCY = 5;         // products imported in parallel
 let pendingAfterConnect = null;     // 'map' | 'pdf' — what to resume once connected
 let pendingPdfFiles = null;
 
@@ -690,15 +691,49 @@ const $$ = (sel) => document.querySelectorAll(sel);
    Bluestone connection (via the pim-agent Worker)
    ========================================================= */
 function isConnected(){ return !!(SETTINGS.workerUrl && SETTINGS.secret); }
-async function mcpCall(tool, args){
-  const r = await fetch(SETTINGS.workerUrl + '/api/mcp-call', {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json', 'X-Demo-Secret': SETTINGS.secret },
-    body: JSON.stringify({ tool, args: args || {} })
+const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+// Back off on rate limits / transient errors: honour Retry-After, else
+// exponential (0.4s, 0.8s, 1.6s … capped) with jitter.
+function backoffMs(attempt, retryAfterSec){
+  const base = retryAfterSec ? retryAfterSec * 1000 : Math.min(8000, 400 * Math.pow(2, attempt - 1));
+  return base + Math.random() * 250;
+}
+async function mcpCall(tool, args, opts){
+  const retries = (opts && opts.retries != null) ? opts.retries : 5;
+  for (let attempt = 1; ; attempt++){
+    let r;
+    try {
+      r = await fetch(SETTINGS.workerUrl + '/api/mcp-call', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', 'X-Demo-Secret': SETTINGS.secret },
+        body: JSON.stringify({ tool, args: args || {} })
+      });
+    } catch(netErr){
+      if (attempt <= retries){ await sleep(backoffMs(attempt)); continue; }
+      throw netErr;
+    }
+    const j = await r.json().catch(()=>({}));
+    if (r.ok && j.success !== false) return j.result;
+    const msg = j.error || ('HTTP ' + r.status);
+    // The Worker wraps upstream errors as 502 with the status in the message,
+    // so detect rate limits by status OR text.
+    const rateLimited = r.status === 429 || /\b429\b|rate.?limit|too many req/i.test(msg);
+    const transient = rateLimited || r.status >= 500 || /\b50[234]\b/.test(msg);
+    if (transient && attempt <= retries){
+      const ra = parseInt(r.headers.get('retry-after') || '', 10);
+      await sleep(backoffMs(attempt, isFinite(ra) ? ra : 0));
+      continue;
+    }
+    throw new Error(msg);
+  }
+}
+// Run `worker(item)` over `items` with at most `size` in flight at once.
+async function runPool(items, size, worker){
+  let idx = 0;
+  const lanes = Array.from({ length: Math.min(size, items.length) }, async () => {
+    while (idx < items.length){ const i = idx++; await worker(items[i], i); }
   });
-  const j = await r.json().catch(()=>({}));
-  if (!r.ok || j.success === false) throw new Error(j.error || ('HTTP ' + r.status));
-  return j.result;
+  await Promise.all(lanes);
 }
 // MCP text tools return "<summary>\n\n<JSON>"; pull out the JSON body.
 function extractMcpText(result){
@@ -1191,7 +1226,8 @@ async function runImport() {
   addLog(`✓ Plan: create_product + ${attrCols.length} attribute write(s) per row`, 'ok');
   addLog('Importing products', 'head');
 
-  for (const r of state.rows) {
+  // Import products in parallel (bounded) — mcpCall retries on rate limits.
+  const importOne = async (r) => {
     const name = (nameCol ? r[nameCol] : '').trim() || '(unnamed)';
     const number = (numberCol ? r[numberCol] : '').trim();
     try {
@@ -1212,7 +1248,8 @@ async function runImport() {
       addLog(`✓ ${number || '—'}  ${name.slice(0, 40)}`, 'ok');
 
       // Write each mapped attribute (set_product_attribute ADDs — fine for a
-      // freshly created product that has no values yet).
+      // freshly created product that has no values yet). Sequential per product
+      // to avoid concurrent writes to the same product.
       for (const a of attrCols) {
         const val = (r[a.col] || '').trim();
         if (!val) continue;
@@ -1226,7 +1263,8 @@ async function runImport() {
       addLog(`✗ ${number || name.slice(0,30)}: ${e.message}`.slice(0, 140), 'err');
     }
     tick();
-  }
+  };
+  await runPool(state.rows, IMPORT_CONCURRENCY, importOne);
 
   addLog('› Done.', 'ok');
   $('#pulse').style.background = 'var(--accent)';
@@ -1240,8 +1278,6 @@ async function runImport() {
   setStep(5);
   $$('.step').forEach(el => { if (+el.dataset.step <= 4) el.classList.add('done'); });
 }
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 /* =========================================================
    Wiring
