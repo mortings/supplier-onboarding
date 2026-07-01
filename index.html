@@ -390,6 +390,33 @@
   .pdf-busy { display:flex; align-items:center; gap:12px; font-size:15px; color:var(--text); }
   .pdf-log { margin-top:14px; max-height:160px; overflow:auto; font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:3px; }
   .pdf-log .err { color:var(--danger); }
+
+  /* ── Import error handling ── */
+  .fail-panel {
+    text-align: left; margin-top: 20px; border: 1px solid rgba(235,72,94,.35);
+    border-radius: var(--radius); background: rgba(235,72,94,.06); overflow: hidden;
+  }
+  .fail-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 14px 18px; border-bottom: 1px solid rgba(235,72,94,.25); flex-wrap: wrap;
+  }
+  .fail-head strong { color: var(--danger); font-size: 15px; }
+  .fail-actions { display: flex; gap: 8px; }
+  .btn-tiny {
+    font-size: 12px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line-2);
+    background: var(--panel-2); color: var(--text); cursor: pointer; font-family: inherit; font-weight: 600;
+  }
+  .btn-tiny:hover { border-color: var(--danger); color: var(--danger); }
+  .fail-list { max-height: 320px; overflow-y: auto; }
+  .fail-row { padding: 12px 18px; border-bottom: 1px solid rgba(235,72,94,.15); }
+  .fail-row:last-child { border-bottom: none; }
+  .fail-row-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .fail-num { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--muted); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; }
+  .fail-name { font-weight: 600; flex: 1; min-width: 120px; }
+  .fail-count { font-size: 12px; color: var(--danger); font-weight: 600; }
+  .fail-msgs { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .fail-msgs li { font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .fail-msgs li b { color: var(--text); }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}</script>
@@ -578,6 +605,16 @@
         <button class="btn btn-primary" id="openCatalogBtn">Open catalog →</button>
         <button class="btn" id="restartBtn">Onboard another file</button>
       </div>
+      <div class="fail-panel" id="failuresPanel" style="display:none">
+        <div class="fail-head">
+          <div><strong id="failCount">0</strong> issue(s) need attention</div>
+          <div class="fail-actions">
+            <button class="btn-tiny" id="failDownloadBtn">⬇ Download CSV</button>
+            <button class="btn-tiny" id="failRetryAllBtn">↻ Retry all</button>
+          </div>
+        </div>
+        <div class="fail-list" id="failList"></div>
+      </div>
     </div>
   </section>
 
@@ -669,6 +706,8 @@ let state = {
   targetCatalogId: '',
   targetCategoryId: '',
   targetCategoryName: '',
+  failures: [],          // [{kind:'create'|'attribute', row, number, name, productId?, attribute?, message}]
+  stats: { done: 0, attrWrites: 0 },   // cumulative across an import + its retries
 };
 
 const SETTINGS = {
@@ -1172,15 +1211,25 @@ async function loadCategories(catalogId){
 /* =========================================================
    Real import → Bluestone PIM (create_product + set_product_attribute)
    ========================================================= */
-async function runImport() {
-  const total = state.rows.length;
+// runImport(jobsOverride) — with no args, runs a fresh import over all
+// state.rows (resets cumulative stats/failures). Pass an array of jobs to
+// retry a subset instead (see retryFailures) — cumulative stats/failures are
+// preserved so the screen-5 summary reflects the whole session, not just
+// this pass. Job shape: { row, mode:'create' } for a full row (re)import, or
+// { row, mode:'attrsOnly', productId, onlyAttrCols:[attrDef,...] } to retry
+// only specific attribute writes on a product that already exists.
+async function runImport(jobsOverride) {
+  const isRetry = Array.isArray(jobsOverride);
+  if (!isRetry) { state.failures = []; state.stats = { done: 0, attrWrites: 0 }; }
+  const jobs = isRetry ? jobsOverride : state.rows.map(row => ({ row, mode: 'create' }));
+  const total = jobs.length;
   let done = 0, errors = 0, attrWrites = 0;
   const start = performance.now();
   const log = $('#log');
   log.innerHTML = '';
   $('#bar').style.width = '0%';
   $('#pulse').style.background = '';
-  $('#importTitle').textContent = 'Importing products…';
+  $('#importTitle').textContent = isRetry ? 'Retrying failed items…' : 'Importing products…';
 
   function addLog(text, cls = '') {
     const d = document.createElement('div');
@@ -1191,12 +1240,12 @@ async function runImport() {
   }
   function tick(){
     $('#sIn').textContent = fmtNum(done);
-    $('#sErr').textContent = errors;
+    $('#sErr').textContent = state.failures.length;
     const elapsed = (performance.now() - start) / 1000;
     $('#sTput').innerHTML = (done / Math.max(0.5, elapsed)).toFixed(1) + ' <small style="color:var(--muted);font-size:12px;font-weight:500;">products / sec</small>';
     $('#sTime').textContent = elapsed.toFixed(1) + 's';
     $('#bar').style.width = Math.min(100, Math.round((done / total) * 100)) + '%';
-    $('#importSub').textContent = `Importing · ${done} / ${total}`;
+    $('#importSub').textContent = `${isRetry ? 'Retrying' : 'Importing'} · ${done} / ${total}`;
   }
 
   // Resolve mapping → concrete write plan.
@@ -1221,62 +1270,174 @@ async function runImport() {
     return { values: ids };
   };
 
-  addLog('› Connecting to Bluestone via pim-agent Worker…', 'info');
-  addLog('✓ Target category: ' + (state.targetCategoryName || state.targetCategoryId), 'ok');
-  addLog(`✓ Plan: create_product + ${attrCols.length} attribute write(s) per row`, 'ok');
-  addLog('Importing products', 'head');
+  if (!isRetry) {
+    addLog('› Connecting to Bluestone via pim-agent Worker…', 'info');
+    addLog('✓ Target category: ' + (state.targetCategoryName || state.targetCategoryId), 'ok');
+    addLog(`✓ Plan: create_product + ${attrCols.length} attribute write(s) per row`, 'ok');
+    addLog('Importing products', 'head');
+  } else {
+    addLog(`› Retrying ${total} failed item(s)…`, 'info');
+  }
 
-  // Import products in parallel (bounded) — mcpCall retries on rate limits.
-  const importOne = async (r) => {
+  // Run one job (create + its attributes, or just a set of attribute retries)
+  // in parallel (bounded) — mcpCall retries on rate limits.
+  const importOne = async (job) => {
+    const r = job.row;
     const name = (nameCol ? r[nameCol] : '').trim() || '(unnamed)';
     const number = (numberCol ? r[numberCol] : '').trim();
-    try {
-      const res = await mcpCall('create_product', {
-        name, number: number || undefined, type: 'SINGLE', categoryId: state.targetCategoryId || undefined
-      });
-      // create_product replies with a sentence ("… ID: <id>. Number: …"), not
-      // JSON — try JSON first, then fall back to parsing the ID out of the text.
-      const parsed = parseMcpJson(res);
-      let pid = parsed && (parsed.id || parsed.productId || parsed._id);
-      if (!pid) { const m = extractMcpText(res).match(/\bID:\s*([A-Za-z0-9]{16,})/); if (m) pid = m[1]; }
-      if (!pid) {
-        const txt = extractMcpText(res);
-        if (/conflict|409|already exist/i.test(txt)) throw new Error('already exists (duplicate number) — skipped');
-        throw new Error('no product id in response: ' + txt.slice(0, 80));
-      }
-      done++;
-      addLog(`✓ ${number || '—'}  ${name.slice(0, 40)}`, 'ok');
+    let pid = job.productId;
 
-      // Write each mapped attribute (set_product_attribute ADDs — fine for a
-      // freshly created product that has no values yet). Sequential per product
-      // to avoid concurrent writes to the same product.
-      for (const a of attrCols) {
-        const val = (r[a.col] || '').trim();
-        if (!val) continue;
-        const resolved = resolveValues(a, val);
-        if (resolved.error){ errors++; addLog(`  ⚠ ${resolved.error} — skipped`.slice(0, 120), 'err'); continue; }
-        try { await mcpCall('set_product_attribute', { productId: pid, definitionId: a.defId, values: resolved.values, attributeName: a.name }); attrWrites++; }
-        catch(e){ errors++; addLog(`  ⚠ ${a.name}: ${e.message}`.slice(0, 120), 'err'); }
+    if (job.mode === 'create') {
+      try {
+        const res = await mcpCall('create_product', {
+          name, number: number || undefined, type: 'SINGLE', categoryId: state.targetCategoryId || undefined
+        });
+        // create_product replies with a sentence ("… ID: <id>. Number: …"), not
+        // JSON — try JSON first, then fall back to parsing the ID out of the text.
+        const parsed = parseMcpJson(res);
+        pid = parsed && (parsed.id || parsed.productId || parsed._id);
+        if (!pid) { const m = extractMcpText(res).match(/\bID:\s*([A-Za-z0-9]{16,})/); if (m) pid = m[1]; }
+        if (!pid) {
+          const txt = extractMcpText(res);
+          if (/conflict|409|already exist/i.test(txt)) throw new Error('already exists (duplicate number) — skipped');
+          throw new Error('no product id in response: ' + txt.slice(0, 80));
+        }
+        done++; state.stats.done++;
+        addLog(`✓ ${number || '—'}  ${name.slice(0, 40)}`, 'ok');
+      } catch(e){
+        errors++;
+        state.failures.push({ kind: 'create', row: r, number, name, message: e.message });
+        addLog(`✗ ${number || name.slice(0,30)}: ${e.message}`.slice(0, 140), 'err');
+        tick();
+        return;
       }
-    } catch(e){
-      errors++;
-      addLog(`✗ ${number || name.slice(0,30)}: ${e.message}`.slice(0, 140), 'err');
     }
+
+    // Write mapped attributes (set_product_attribute ADDs — fine for a
+    // freshly created product that has no values yet). Sequential per
+    // product to avoid concurrent writes to the same product. A retry job
+    // only carries the specific attribute(s) that failed last time.
+    const colsToWrite = job.mode === 'attrsOnly' ? job.onlyAttrCols : attrCols;
+    let attrOk = true;
+    for (const a of colsToWrite) {
+      const val = (r[a.col] || '').trim();
+      if (!val) continue;
+      const resolved = resolveValues(a, val);
+      if (resolved.error){
+        errors++; attrOk = false;
+        state.failures.push({ kind: 'attribute', row: r, number, name, productId: pid, attrDef: a, message: resolved.error });
+        addLog(`  ⚠ ${resolved.error} — skipped`.slice(0, 120), 'err');
+        continue;
+      }
+      try { await mcpCall('set_product_attribute', { productId: pid, definitionId: a.defId, values: resolved.values, attributeName: a.name }); attrWrites++; state.stats.attrWrites++; }
+      catch(e){
+        errors++; attrOk = false;
+        state.failures.push({ kind: 'attribute', row: r, number, name, productId: pid, attrDef: a, message: e.message });
+        addLog(`  ⚠ ${a.name}: ${e.message}`.slice(0, 120), 'err');
+      }
+    }
+    if (job.mode === 'attrsOnly' && attrOk) addLog(`✓ ${number || '—'}  ${name.slice(0, 40)} — fixed`, 'ok');
     tick();
   };
-  await runPool(state.rows, IMPORT_CONCURRENCY, importOne);
+  await runPool(jobs, IMPORT_CONCURRENCY, importOne);
 
   addLog('› Done.', 'ok');
   $('#pulse').style.background = 'var(--accent)';
-  $('#importTitle').textContent = 'Import complete';
-  $('#importSub').textContent = `Imported ${fmtNum(done)} of ${fmtNum(total)} products · ${fmtNum(attrWrites)} attribute writes · ${errors} error(s) in ${((performance.now()-start)/1000).toFixed(1)}s`;
+  $('#importTitle').textContent = isRetry ? 'Retry complete' : 'Import complete';
+  $('#importSub').textContent = `${isRetry ? 'Retried' : 'Imported'} ${fmtNum(done)} of ${fmtNum(total)} ${isRetry ? 'item(s)' : 'products'} · ${fmtNum(attrWrites)} attribute writes · ${errors} error(s) in ${((performance.now()-start)/1000).toFixed(1)}s`;
 
   await sleep(600);
-  $('#doneCount').textContent = fmtNum(done);
-  $('#doneCats').textContent = '1';
-  $('#screen-5 p').innerHTML = `<span id="doneCount">${fmtNum(done)}</span> products imported into <strong>${escapeHtml(state.targetCategoryName || 'the selected category')}</strong> · ${fmtNum(attrWrites)} attribute values · ${errors} error(s)`;
+  // (This fully replaces the <p>, including its doneCount/doneCats spans —
+  // setting them beforehand was always immediately overwritten, so skip it.)
+  $('#screen-5 p').innerHTML = `<span id="doneCount">${fmtNum(state.stats.done)}</span> products imported into <strong>${escapeHtml(state.targetCategoryName || 'the selected category')}</strong> · ${fmtNum(state.stats.attrWrites)} attribute values · ${state.failures.length} error(s)`;
+  renderFailuresPanel();
   setStep(5);
   $$('.step').forEach(el => { if (+el.dataset.step <= 4) el.classList.add('done'); });
+}
+
+/* =========================================================
+   Error review & retry (screen 5)
+   ========================================================= */
+let failGroups = new Map();   // key -> { number, name, items:[failure,...] } — rebuilt on each render
+
+function renderFailuresPanel(){
+  const panel = $('#failuresPanel');
+  const list = $('#failList');
+  const n = state.failures.length;
+  $('#failCount').textContent = n;
+  if (!n){ panel.style.display = 'none'; list.innerHTML = ''; failGroups = new Map(); return; }
+  panel.style.display = 'block';
+  failGroups = new Map();
+  for (const f of state.failures){
+    const key = `${f.number || ''}|${f.name || ''}`;
+    if (!failGroups.has(key)) failGroups.set(key, { number: f.number, name: f.name, items: [] });
+    failGroups.get(key).items.push(f);
+  }
+  list.innerHTML = [...failGroups.entries()].map(([key, g]) => `
+    <div class="fail-row">
+      <div class="fail-row-head">
+        <span class="fail-num">${escapeHtml(g.number || '—')}</span>
+        <span class="fail-name">${escapeHtml(g.name || '(unnamed)')}</span>
+        <span class="fail-count">${g.items.length} issue${g.items.length === 1 ? '' : 's'}</span>
+        <button class="btn-tiny fail-retry-one" data-key="${escapeHtml(key)}">↻ Retry</button>
+      </div>
+      <ul class="fail-msgs">
+        ${g.items.map(f => `<li><b>${f.kind === 'create' ? 'Create failed' : escapeHtml((f.attrDef && f.attrDef.name) || 'attribute')}</b>: ${escapeHtml(f.message)}</li>`).join('')}
+      </ul>
+    </div>
+  `).join('');
+}
+
+// Retry a subset of failures (defaults to all outstanding). Groups
+// attribute-level failures by product so one job re-attempts every failed
+// attribute on that product in a single pass; row-creation failures re-run
+// the full create + attribute-write pipeline for that row. Refreshes the
+// attribute definitions first — a common fix for "not a valid option" is
+// adding the missing dictionary value in Bluestone, and retry should see it.
+async function retryFailures(subset){
+  const items = subset || state.failures.slice();
+  if (!items.length) return;
+  state.failures = state.failures.filter(f => !items.includes(f));
+  renderFailuresPanel();
+
+  if (isConnected() && items.some(f => f.kind === 'attribute')) {
+    try { await loadDefs(); } catch(e) { /* best-effort refresh; fall back to the snapshot below */ }
+  }
+
+  const jobs = [];
+  const byProduct = new Map();
+  for (const f of items){
+    if (f.kind === 'create') { jobs.push({ row: f.row, mode: 'create' }); }
+    else {
+      if (!byProduct.has(f.productId)) byProduct.set(f.productId, { row: f.row, mode: 'attrsOnly', productId: f.productId, onlyAttrCols: [] });
+      const live = state.defs.find(d => d.id === f.attrDef.defId);
+      const attrForRetry = live ? { col: f.attrDef.col, defId: live.id, name: live.name, dataType: live.dataType, enumValues: live.enumValues } : f.attrDef;
+      byProduct.get(f.productId).onlyAttrCols.push(attrForRetry);
+    }
+  }
+  jobs.push(...byProduct.values());
+
+  setStep(4);
+  await runImport(jobs);
+}
+
+function downloadFailuresCSV(){
+  if (!state.failures.length) return;
+  const cols = state.columns.length ? state.columns : Object.keys(state.failures[0].row || {});
+  const header = [...cols, '_stage', '_attribute', '_product_id', '_error'];
+  const esc = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [header.map(esc).join(',')];
+  for (const f of state.failures){
+    const row = cols.map(c => esc(f.row ? f.row[c] : ''));
+    row.push(esc(f.kind), esc(f.attrDef ? f.attrDef.name : ''), esc(f.productId || ''), esc(f.message));
+    lines.push(row.join(','));
+  }
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'import-errors.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
 }
 
 /* =========================================================
@@ -1357,13 +1518,22 @@ $('#themeToggle').onclick = () => {
 $('#openCatalogBtn').onclick = () => alert('Demo: would open the Bluestone PIM catalog view.');
 $('#restartBtn').onclick = () => {
   // Keep the live data model & connection; just clear the file-specific bits.
-  state = { ...state, fileName:'', rows:[], columns:[], mapping:{}, targetCatalogId:'', targetCategoryId:'', targetCategoryName:'' };
+  state = { ...state, fileName:'', rows:[], columns:[], mapping:{}, targetCatalogId:'', targetCategoryId:'', targetCategoryName:'', failures:[], stats:{done:0,attrWrites:0} };
   $('#bar').style.width = '0%';
   $('#dryRunBtn').textContent = 'Dry-run validate';
   $('#dryRunBtn').style.color = '';
   $$('.step').forEach(el => el.classList.remove('done'));
+  renderFailuresPanel();
   setStep(1);
 };
+$('#failRetryAllBtn').onclick = () => retryFailures();
+$('#failDownloadBtn').onclick = downloadFailuresCSV;
+$('#failList').addEventListener('click', (e) => {
+  const btn = e.target.closest('.fail-retry-one');
+  if (!btn) return;
+  const group = failGroups.get(btn.dataset.key);
+  if (group) retryFailures(group.items);
+});
 
 /* ── Init ── */
 refreshConnUI();
