@@ -308,8 +308,15 @@
   .progress > div {
     height: 100%; width: 0%;
     background: linear-gradient(90deg, var(--brand), var(--accent));
-    transition: width .25s ease;
+    transition: width .3s ease;
   }
+  .pbar-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 12px; font-weight: 600; color: var(--muted);
+    margin: 18px 0 7px;
+  }
+  .pbar-row + .pbar-row { margin-top: 16px; }
+  .pbar-row span:last-child { color: var(--text); font-variant-numeric: tabular-nums; }
   .log {
     margin-top: 16px; height: 280px; overflow: auto;
     font-family: 'JetBrains Mono', monospace; font-size: 12px;
@@ -590,15 +597,20 @@
     <div class="import-wrap">
       <div class="card">
         <h3><span class="pulse" id="pulse"></span><span id="importTitle">Importing products…</span></h3>
-        <div class="sub" id="importSub">Connecting to Bluestone PAPI…</div>
+        <div class="sub" id="importSub">Preparing…</div>
+
+        <div class="pbar-row"><span>Products</span><span id="pProdPct">0%</span></div>
         <div class="progress"><div id="bar"></div></div>
+
+        <div class="pbar-row"><span>Attribute values</span><span id="pAttrPct">0%</span></div>
+        <div class="progress"><div id="barAttr"></div></div>
+
         <div class="log" id="log"></div>
       </div>
       <div>
-        <div class="side-stat"><div class="k">Imported</div><div class="v" id="sIn">0</div></div>
-        <div class="side-stat"><div class="k">Throughput</div><div class="v" id="sTput">0 <small style="color:var(--muted);font-size:12px;font-weight:500;">products / sec</small></div></div>
+        <div class="side-stat"><div class="k">Products imported</div><div class="v" id="sIn">0</div></div>
+        <div class="side-stat"><div class="k">Attribute values written</div><div class="v" id="sAttr">0</div></div>
         <div class="side-stat"><div class="k">Errors</div><div class="v" id="sErr">0</div></div>
-        <div class="side-stat"><div class="k">Time elapsed</div><div class="v" id="sTime">0.0s</div></div>
       </div>
     </div>
   </section>
@@ -1346,11 +1358,11 @@ async function runImport(jobsOverride) {
   if (!isRetry) { state.failures = []; state.stats = { done: 0, attrWrites: 0 }; }
   const jobs = isRetry ? jobsOverride : state.rows.map(row => ({ row, mode: 'create' }));
   const total = jobs.length;
-  let done = 0, errors = 0, attrWrites = 0;
-  const start = performance.now();
+  let done = 0, errors = 0, attrWrites = 0, attrDone = 0, processed = 0, expectedAttrs = 0;
   const log = $('#log');
   log.innerHTML = '';
-  $('#bar').style.width = '0%';
+  $('#bar').style.width = '0%'; $('#barAttr').style.width = '0%';
+  $('#pProdPct').textContent = '0%'; $('#pAttrPct').textContent = '0%';
   $('#pulse').style.background = '';
   $('#importTitle').textContent = isRetry ? 'Retrying failed items…' : 'Importing products…';
 
@@ -1361,20 +1373,27 @@ async function runImport(jobsOverride) {
     log.appendChild(d);
     log.scrollTop = log.scrollHeight;
   }
-  function tick(){
+  function render(){
+    const prodPct = total ? Math.round(processed / total * 100) : 0;
+    const attrPct = expectedAttrs ? Math.min(100, Math.round(attrDone / expectedAttrs * 100)) : (processed >= total ? 100 : 0);
+    $('#bar').style.width = prodPct + '%';       $('#pProdPct').textContent = prodPct + '%';
+    $('#barAttr').style.width = attrPct + '%';   $('#pAttrPct').textContent = attrPct + '%';
     $('#sIn').textContent = fmtNum(done);
-    $('#sErr').textContent = state.failures.length;
-    const elapsed = (performance.now() - start) / 1000;
-    $('#sTput').innerHTML = (done / Math.max(0.5, elapsed)).toFixed(1) + ' <small style="color:var(--muted);font-size:12px;font-weight:500;">products / sec</small>';
-    $('#sTime').textContent = elapsed.toFixed(1) + 's';
-    $('#bar').style.width = Math.min(100, Math.round((done / total) * 100)) + '%';
-    $('#importSub').textContent = `${isRetry ? 'Retrying' : 'Importing'} · ${done} / ${total}`;
+    $('#sAttr').textContent = fmtNum(attrWrites);
+    $('#sErr').textContent = fmtNum(state.failures.length);
+    $('#importSub').textContent = `${isRetry ? 'Retrying' : 'Importing'} ${fmtNum(processed)} of ${fmtNum(total)} ${isRetry ? 'item(s)' : 'products'}`;
   }
 
   // Resolve mapping → concrete write plan (shared with validateRows below, so
   // "looks valid" and "will actually import" can never drift apart).
   const { numberCol, nameCol, attrCols } = buildImportPlan();
   const resolveValues = resolveAttrValue;
+
+  // Expected attribute writes across all jobs (drives the attribute bar).
+  for (const j of jobs) {
+    const cols = j.mode === 'attrsOnly' ? j.onlyAttrCols : attrCols;
+    for (const a of cols) if ((j.row[a.col] || '').trim()) expectedAttrs++;
+  }
 
   if (!isRetry) {
     addLog('› Connecting to Bluestone via pim-agent Worker…', 'info');
@@ -1384,6 +1403,7 @@ async function runImport(jobsOverride) {
   } else {
     addLog(`› Retrying ${total} failed item(s)…`, 'info');
   }
+  render();
 
   // Run one job (create + its attributes, or just a set of attribute retries)
   // in parallel (bounded) — mcpCall retries on rate limits.
@@ -1413,8 +1433,11 @@ async function runImport(jobsOverride) {
       } catch(e){
         errors++;
         state.failures.push({ kind: 'create', row: r, number, name, message: e.message });
+        // Product never created → its attributes won't be attempted; drop them
+        // from the expected total so the attribute bar can still reach 100%.
+        expectedAttrs -= attrCols.filter(a => (r[a.col] || '').trim()).length;
         addLog(`✗ ${number || name.slice(0,30)}: ${e.message}`.slice(0, 140), 'err');
-        tick();
+        processed++; render();
         return;
       }
     }
@@ -1430,9 +1453,10 @@ async function runImport(jobsOverride) {
       if (!val) continue;
       const resolved = resolveValues(a, val);
       if (resolved.error){
-        errors++; attrOk = false;
+        errors++; attrOk = false; attrDone++;
         state.failures.push({ kind: 'attribute', row: r, number, name, productId: pid, attrDef: a, message: resolved.error });
         addLog(`  ⚠ ${resolved.error} — skipped`.slice(0, 120), 'err');
+        render();
         continue;
       }
       try { await mcpCall('set_product_attribute', { productId: pid, definitionId: a.defId, values: resolved.values, attributeName: a.name }); attrWrites++; state.stats.attrWrites++; }
@@ -1441,16 +1465,18 @@ async function runImport(jobsOverride) {
         state.failures.push({ kind: 'attribute', row: r, number, name, productId: pid, attrDef: a, message: e.message });
         addLog(`  ⚠ ${a.name}: ${e.message}`.slice(0, 120), 'err');
       }
+      attrDone++; render();
     }
     if (job.mode === 'attrsOnly' && attrOk) addLog(`✓ ${number || '—'}  ${name.slice(0, 40)} — fixed`, 'ok');
-    tick();
+    processed++; render();
   };
   await runPool(jobs, IMPORT_CONCURRENCY, importOne);
 
+  processed = total; attrDone = Math.max(attrDone, expectedAttrs); render();
   addLog('› Done.', 'ok');
   $('#pulse').style.background = 'var(--accent)';
   $('#importTitle').textContent = isRetry ? 'Retry complete' : 'Import complete';
-  $('#importSub').textContent = `${isRetry ? 'Retried' : 'Imported'} ${fmtNum(done)} of ${fmtNum(total)} ${isRetry ? 'item(s)' : 'products'} · ${fmtNum(attrWrites)} attribute writes · ${errors} error(s) in ${((performance.now()-start)/1000).toFixed(1)}s`;
+  $('#importSub').textContent = `${isRetry ? 'Retried' : 'Imported'} ${fmtNum(done)} of ${fmtNum(total)} ${isRetry ? 'item(s)' : 'products'} · ${fmtNum(attrWrites)} attribute value${attrWrites!==1?'s':''}${state.failures.length?` · ${state.failures.length} error${state.failures.length!==1?'s':''}`:''}`;
 
   await sleep(600);
   // (This fully replaces the <p>, including its doneCount/doneCats spans —
