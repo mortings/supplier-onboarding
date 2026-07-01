@@ -6,51 +6,56 @@
 <title>Bluestone PIM — Drop</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+  /* Bluestone PIM brand — Data Navy dark surface */
   :root, [data-theme="dark"] {
-    --bg: #0b0d12;
-    --bg-2: #11141b;
-    --panel: #161a23;
-    --panel-2: #1c2030;
-    --line: #232838;
-    --line-2: #2c3245;
-    --text: #e7eaf2;
-    --muted: #8a92a6;
-    --accent: #6ee7b7;
-    --accent-2: #38bdf8;
-    --brand: #4f8cff;
-    --danger: #f87171;
-    --warn: #fbbf24;
+    --bg: #081b2e;
+    --bg-2: #0c2e4e;
+    --panel: #0e3357;
+    --panel-2: #124066;
+    --line: #1d4568;
+    --line-2: #2a5c88;
+    --text: #eaf1fb;
+    --muted: #94aac5;
+    --accent: #ec672b;      /* Code Orange */
+    --accent-2: #6ea0ff;    /* Sky Blue (light) */
+    --brand: #3d74f4;       /* Sky Blue */
+    --danger: #eb485e;      /* Byte Berry */
+    --warn: #fbe74d;        /* Digital Citrine */
+    --logo-dark: #ffffff;
+    --logo-blue: #5a93ff;
     --radius: 14px;
-    --header-bg: rgba(11,13,18,.7);
+    --header-bg: rgba(8,27,46,.72);
   }
+  /* Bluestone PIM brand — clean white surface (default) */
   [data-theme="light"] {
-    --bg: #f7f8fb;
+    --bg: #ffffff;
     --bg-2: #ffffff;
     --panel: #ffffff;
-    --panel-2: #f3f5f9;
-    --line: #e4e7ee;
-    --line-2: #d3d8e2;
-    --text: #1a1f２e;
-    --text: #1a1f2e;
-    --muted: #6b7488;
-    --accent: #10a37f;
-    --accent-2: #0284c7;
-    --brand: #2f6fe8;
-    --danger: #dc2626;
-    --warn: #d97706;
+    --panel-2: #f4f7fb;
+    --line: #e3e9f2;
+    --line-2: #cdd8e8;
+    --text: #0c2e4e;        /* Data Navy */
+    --muted: #5b6b82;
+    --accent: #ec672b;      /* Code Orange */
+    --accent-2: #0f05cc;    /* Electric Blue */
+    --brand: #3d74f4;       /* Sky Blue */
+    --danger: #eb485e;      /* Byte Berry */
+    --warn: #b7860b;        /* darkened Citrine for contrast */
+    --logo-dark: #0c2e4e;
+    --logo-blue: #3d74f4;
     --radius: 14px;
-    --header-bg: rgba(247,248,251,.8);
+    --header-bg: rgba(255,255,255,.85);
   }
   body { transition: background-color .3s ease, color .3s ease; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; height: 100%; }
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Montserrat', system-ui, -apple-system, sans-serif;
     background:
-      radial-gradient(1200px 600px at 80% -10%, rgba(79,140,255,.15), transparent 60%),
-      radial-gradient(900px 500px at -10% 100%, rgba(110,231,183,.10), transparent 60%),
+      radial-gradient(1200px 600px at 80% -10%, rgba(61,116,244,.13), transparent 60%),
+      radial-gradient(900px 500px at -10% 100%, rgba(236,103,43,.09), transparent 60%),
       var(--bg);
     color: var(--text);
     -webkit-font-smoothing: antialiased;
@@ -78,13 +83,11 @@
   .theme-toggle .icon-sun { display: none; }
   [data-theme="light"] .theme-toggle .icon-sun { display: block; }
   [data-theme="light"] .theme-toggle .icon-moon { display: none; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .2px; }
-  .brand-logo {
-    width: 28px; height: 28px; border-radius: 8px;
-    background: conic-gradient(from 220deg, #4f8cff, #6ee7b7, #38bdf8, #4f8cff);
-    box-shadow: 0 6px 24px rgba(79,140,255,.35);
-  }
-  .brand small { font-weight: 500; color: var(--muted); margin-left: 6px; }
+  .brand { display: flex; align-items: center; gap: 11px; font-weight: 700; letter-spacing: .2px; font-size: 17px; }
+  .brand-mark { width: 30px; height: 30px; flex: none; }
+  .brand-mark .m-dark { fill: var(--logo-dark); }
+  .brand-mark .m-blue { fill: var(--logo-blue); }
+  .brand small { font-weight: 700; color: var(--brand); margin-left: 4px; text-transform: uppercase; letter-spacing: 1.6px; font-size: 11px; align-self: center; padding: 3px 7px; border: 1px solid var(--brand); border-radius: 6px; }
   nav .pill {
     font-size: 12px; padding: 6px 10px; border: 1px solid var(--line-2);
     border-radius: 999px; color: var(--muted);
@@ -113,9 +116,9 @@
     display: grid; place-items: center; font-size: 11px;
     border: 1px solid var(--line-2);
   }
-  .step.active { color: var(--text); border-color: var(--brand); background: rgba(79,140,255,.08); }
+  .step.active { color: var(--text); border-color: var(--brand); background: rgba(61,116,244,.08); }
   .step.active .dot { background: var(--brand); color: white; border-color: var(--brand); }
-  .step.done { color: var(--accent); border-color: rgba(110,231,183,.35); }
+  .step.done { color: var(--accent); border-color: rgba(236,103,43,.35); }
   .step.done .dot { background: var(--accent); color: #022; border-color: var(--accent); }
   .step-sep { height: 1px; width: 24px; background: var(--line); }
 
@@ -142,18 +145,18 @@
   }
   .dropzone::before {
     content: ''; position: absolute; inset: 0;
-    background: radial-gradient(600px 200px at 50% 0%, rgba(79,140,255,.12), transparent 70%);
+    background: radial-gradient(600px 200px at 50% 0%, rgba(61,116,244,.12), transparent 70%);
     pointer-events: none;
   }
   .dropzone.drag {
     border-color: var(--brand);
-    background: linear-gradient(180deg, rgba(79,140,255,.08), var(--panel-2));
+    background: linear-gradient(180deg, rgba(61,116,244,.08), var(--panel-2));
     transform: scale(1.005);
   }
   .dz-icon {
     width: 64px; height: 64px; margin: 0 auto 16px;
     border-radius: 18px; display: grid; place-items: center;
-    background: linear-gradient(180deg, rgba(79,140,255,.15), rgba(110,231,183,.08));
+    background: linear-gradient(180deg, rgba(61,116,244,.15), rgba(236,103,43,.08));
     border: 1px solid var(--line-2);
     color: var(--brand);
   }
@@ -168,11 +171,11 @@
     color: var(--text); font-weight: 600; font-size: 14px;
     transition: all .15s ease;
   }
-  .btn:hover { border-color: #3a4259; background: #232838; }
+  .btn:hover { border-color: var(--brand); background: var(--panel-2); }
   .btn-primary {
-    background: linear-gradient(180deg, #5a98ff, #3f7ce6);
-    border-color: #3f7ce6; color: #fff;
-    box-shadow: 0 8px 24px -8px rgba(79,140,255,.6);
+    background: linear-gradient(180deg, #4d80f6, #3d74f4);
+    border-color: #3568e0; color: #fff;
+    box-shadow: 0 8px 24px -8px rgba(61,116,244,.55);
   }
   .btn-primary:hover { filter: brightness(1.06); }
   .btn-ghost { background: transparent; }
@@ -235,8 +238,8 @@
   select:focus { outline: none; border-color: var(--brand); }
   .badge {
     font-size: 11px; padding: 3px 8px; border-radius: 999px;
-    background: rgba(110,231,183,.12); color: var(--accent);
-    border: 1px solid rgba(110,231,183,.25);
+    background: rgba(236,103,43,.12); color: var(--accent);
+    border: 1px solid rgba(236,103,43,.25);
     font-weight: 500;
   }
   .badge.warn { background: rgba(251,191,36,.1); color: var(--warn); border-color: rgba(251,191,36,.25); }
@@ -313,12 +316,12 @@
   .pulse {
     display: inline-block; width: 8px; height: 8px; border-radius: 50%;
     background: var(--accent); margin-right: 6px; vertical-align: middle;
-    box-shadow: 0 0 0 0 rgba(110,231,183,.6); animation: pulse 1.4s infinite;
+    box-shadow: 0 0 0 0 rgba(236,103,43,.6); animation: pulse 1.4s infinite;
   }
   @keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(110,231,183,.6); }
-    70% { box-shadow: 0 0 0 10px rgba(110,231,183,0); }
-    100% { box-shadow: 0 0 0 0 rgba(110,231,183,0); }
+    0% { box-shadow: 0 0 0 0 rgba(236,103,43,.6); }
+    70% { box-shadow: 0 0 0 10px rgba(236,103,43,0); }
+    100% { box-shadow: 0 0 0 0 rgba(236,103,43,0); }
   }
 
   /* Done */
@@ -326,7 +329,7 @@
   .done-icon {
     width: 88px; height: 88px; margin: 0 auto 20px;
     border-radius: 50%; display: grid; place-items: center;
-    background: radial-gradient(circle, rgba(110,231,183,.25), transparent 70%);
+    background: radial-gradient(circle, rgba(236,103,43,.25), transparent 70%);
     color: var(--accent);
   }
   .done-icon svg { width: 56px; height: 56px; }
@@ -380,8 +383,16 @@
 
 <header>
   <div class="brand">
-    <div class="brand-logo"></div>
-    Bluestone PIM <small>· Drop</small>
+    <svg class="brand-mark" viewBox="6 10 112 92" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path class="m-dark" d="M69.55,17.35l-34.03,28.48c-1.06.88-.25,2.57,1.11,2.36l30.75-4.74c.6-.09,1.06-.56,1.16-1.16l3.29-23.74c.16-1.23-1.3-2.01-2.27-1.2Z"/>
+      <path class="m-blue" d="M81.51,12.63l32.16,42.02c1.34,1.74-1.34,3.52-3.35,2.2l-24.76-16.24c-.42-.28-.69-.62-.81-1.04l-7.4-25.77c-.56-1.97,2.82-2.92,4.16-1.16Z"/>
+      <path class="m-dark" d="M44.56,73.94l36.6,3.59c1.64.16,2.66-1.69,1.64-2.94l-18.9-23.34c-.72-.88-2.08-.93-2.85-.07l-17.7,19.76c-.99,1.11-.3,2.87,1.2,3.01Z"/>
+      <path class="m-blue" d="M12.47,58.23l37.06-7.87c1.8-.37,3.01,1.76,1.74,3.05l-17.4,17.63c-.56.58-1.43.72-2.17.35l-19.67-9.76c-1.55-.76-1.27-3.03.44-3.4Z"/>
+      <path class="m-dark" d="M28.92,80.35l2.89,12.15c.46,1.99-2.01,3.33-3.47,1.87l-19.23-19.3c-1.57-1.6.23-4.14,2.29-3.24l16.33,7.13c.6.28,1.02.79,1.18,1.39Z"/>
+      <path class="m-dark" d="M35.17,87.55l2.87-6.92c.46-1.13,2.15-.9,2.34.32l2.54,16.1c.21,1.32-1.57,1.92-2.27.76l-5.41-9.21c-.19-.32-.21-.72-.07-1.06Z"/>
+      <path class="m-blue" d="M47.8,80.51l32.46,3.33c1.97.21,2.29,2.87.44,3.52l-29.5,10.3c-1.06.37-2.2-.25-2.43-1.34l-2.96-13.65c-.28-1.18.74-2.29,1.99-2.15Z"/>
+    </svg>
+    Bluestone PIM <small>Drop</small>
   </div>
   <nav>
     <button class="btn conn-btn" id="connectBtn" title="Connect to Bluestone PIM"><span class="conn-dot" id="connDot"></span> <span id="connLabel">Connect</span></button>
@@ -1281,7 +1292,7 @@ $('#connTest').onclick = testConnect;
 $('#connSave').onclick = saveConnect;
 $('#connectModal').addEventListener('click', e => { if (e.target.id === 'connectModal') closeConnect(); });
 // Theme toggle
-const savedTheme = localStorage.getItem('bs-theme') || 'dark';
+const savedTheme = localStorage.getItem('bs-theme') || 'light';
 document.documentElement.setAttribute('data-theme', savedTheme);
 $('#themeToggle').onclick = () => {
   const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
